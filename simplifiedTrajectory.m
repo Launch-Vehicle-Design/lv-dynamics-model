@@ -1,4 +1,9 @@
 clear; clc; close all
+addpath("parameter_functions\")
+
+set(0,'DefaultTextInterpreter','latex')
+set(0,'DefaultFigureColor',[1,1,1])
+set(groot,'defaultAxesFontSize',16)
 
 [param, envir] = sysparam();
 release_alti = 40000*0.3048;
@@ -23,7 +28,7 @@ t_iter = [t_1stc_record(end),0.2,t_1stc_record(end)+8]; % arbitrary final time
 init_cond_2stb = x_2stb_init; init_cond_2stb(2) = 10/180*pi;
 [t_2stb_record, x_2stb_record, x_2stb_final, Force_2stb_record] = rk4AscentSim(@simplifiedAscent,t_iter,init_cond_2stb,2,true,param,envir);
 % 2nd stage coast phase
-t_iter = [t_2stb_record(end),0.1,t_2stb_record(end)+1];
+t_iter = [t_2stb_record(end),0.1,t_2stb_record(end)+10];
 init_cond_2stc = x_2stb_final;
 [t_2stc_record, x_2stc_record, x_2stc_final, Force_2stc_record] = rk4AscentSim(@simplifiedAscent,t_iter,init_cond_2stc,2,false,param,envir);
 
@@ -53,7 +58,7 @@ xlabel("Downrange (km)"); ylabel("Altitude (km)");
 figure; plot(t_record,Force_record(:,1),"r","LineWidth",1.5); grid on
 hold on; plot(t_record,Force_record(:,2),"k","LineWidth",1.5);
 xlabel("Time since Release (s)"); ylabel("Force (N)");
-legend("Thrust","Drag")
+legend("Thrust","Drag","interpreter","latex")
 
 piece = 50; ealpha = 0:2*pi/piece:2*pi;
 ex = envir.Rp*cos(ealpha); ey = envir.Rp*sin(ealpha);
@@ -63,8 +68,35 @@ plot(ex/1000,ey/1000,"Color",[0.7 0.7 0.7],"LineWidth",1.2)
 xlabel("Earth Centered X (km)"); ylabel("Earth Centered Y (km)");
 axis("equal")
 
-sep_time = t_1stc_record(end);
-visual2D(t_record,x_record,Force_record,sep_time,param,true,"demo_flight_2.mp4")
+figure; subplot(2,3,1);
+plot(t_record, x_record(:,1)/0.3048,"k","LineWidth",1.2); grid on
+xlabel("Time since Release (s)"); ylabel("Vehicle Velocity (ft/s)");
+subplot(2,3,2);
+plot(t_record, x_record(:,2)*180/pi,"k","LineWidth",1.2); grid on
+xlabel("Time since Release (s)"); ylabel("Pitch angle (deg)");
+subplot(2,3,3);
+plot(t_record, x_record(:,3)/0.3048,"k","LineWidth",1.2); grid on
+xlabel("Time since Release (s)"); ylabel("Altitude (ft)");
+subplot(2,3,4);
+plot(t_record, x_record(:,4)/0.3048,"k","LineWidth",1.2); grid on
+xlabel("Time since Release (s)"); ylabel("Downrange (ft)");
+subplot(2,3,5);
+plot(t_record, x_record(:,5)*2.20462,"k","LineWidth",1.2); grid on
+xlabel("Time since Release (s)"); ylabel("Vehicle Mass (lb)");
+subplot(2,3,6); 
+plot(x_record(:,4)/1000,x_record(:,3)/0.3048,"k","LineWidth",1.2); grid on
+xlabel("Downrange (km)"); ylabel("Altitude (ft)");
+
+piece = 50; ealpha = 0:2*pi/piece:2*pi;
+ex = envir.Rp*cos(ealpha); ey = envir.Rp*sin(ealpha);
+[x,y] = dh2xy(x_record(:,4),x_record(:,3),envir);
+figure; plot(x/0.3048,y/0.3048,"k","LineWidth",1.5); grid on; hold on
+plot(ex/0.3048,ey/0.3048,"Color",[0.7 0.7 0.7],"LineWidth",1.2)
+xlabel("Earth Centered X (ft)"); ylabel("Earth Centered Y (ft)");
+axis("equal")
+
+% sep_time = t_1stc_record(end);
+% visual2D(t_record,x_record,Force_record,sep_time,param,true,"demo_flight_2.mp4")
 
 function [t,x,x_final,F] = rk4AscentSim(dynFunc,t_iter,init_cond,stage,firing,param,envir)
     t0 = t_iter(1); dt = t_iter(2); tf = t_iter(3);

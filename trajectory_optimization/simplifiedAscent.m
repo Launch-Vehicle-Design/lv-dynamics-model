@@ -1,5 +1,4 @@
 function [dxdt,forces] = simplifiedAscent(t, x, stage, firing, param, envir)
-addpath("parameter_functions\")
 % x represents stats as follows
 % 1 - v, velocity
 % 2 - gamma, flight path angle

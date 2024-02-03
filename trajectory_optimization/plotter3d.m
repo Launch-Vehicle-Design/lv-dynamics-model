@@ -12,7 +12,7 @@ function plotter3d(x,N_1st,N_2nd,param)
     quiver3(unsc_x,unsc_y,unsc_z,unsc_vx,unsc_vy,unsc_vz);
     xl = xlim; yl = ylim; zl = zlim; 
     [X,Y,Z] = sphere(100); 
-    surf(X*param.scales.length,Y*param.scales.length,Z*param.scales.length,"EdgeColor","none");
+    surf(X*param.scales.length,Y*param.scales.length,Z*param.scales.length,"EdgeColor","none","FaceColor",[0.7 0.7 0.7]);
     axis equal; xlim(xl); ylim(yl); zlim(zl);
     xlabel("x"); ylabel("y"); zlabel("z");
 end

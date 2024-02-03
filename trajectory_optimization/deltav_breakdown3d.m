@@ -1,7 +1,7 @@
 addpath("..\parameter_functions")
 
-filename = "dircol3d_final1_scaled.mat";
-load(filename,"log_x","log_param");
+file_name = "dircol3d_final3_scaled.mat";
+load(file_name,"log_x","log_param");
 
 state_scaling = ones([7 1]); time_scaling = 1;
 S = log_param.S; maxT_1st = log_param.maxT_1st; maxT_2nd = log_param.maxT_2nd;

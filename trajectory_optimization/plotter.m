@@ -14,6 +14,11 @@ function axes = plotter(x,N_1st,N_2nd,param)
     unsc_vz = x(param.init_ind_ptr(6)+(1:N))*param.scales.speed;
     unsc_ux = x(param.init_ind_ptr(8)+(1:N));
     unsc_uy = x(param.init_ind_ptr(9)+(1:N));
+    throtl = x(param.init_ind_ptr(10)+(1:N));
+    if length(param.init_ind_ptr) == 12
+        unsc_uz = x(param.init_ind_ptr(10)+(1:N));
+        throtl = x(param.init_ind_ptr(11)+(1:N));
+    end
     rn = vecnorm([unsc_x';unsc_y';unsc_z'])'; vn = vecnorm([unsc_vx';unsc_vy';unsc_vz'])';
     pitch_ang = (unsc_vx.*unsc_x + unsc_vy.*unsc_y + unsc_vz.*unsc_z)./rn./vn;
     
@@ -36,6 +41,9 @@ function axes = plotter(x,N_1st,N_2nd,param)
     axes(4) = subplot(2,3,4); 
     plot(unsc_t, unsc_ux*180/pi,"r","LineWidth",1.2); grid on; hold on;
     plot(unsc_t, unsc_uy*180/pi,"b","LineWidth",1.2);
+    if length(param.init_ind_ptr) == 12
+        plot(unsc_t, unsc_uz*180/pi,"k","LineWidth",1.2);
+    end
     xlabel("Time since Release (s)"); ylabel("Gimbal Angle (deg)"); hold off;
 
     axes(5) = subplot(2,3,5);
@@ -43,6 +51,6 @@ function axes = plotter(x,N_1st,N_2nd,param)
     xlabel("Time since Release (s)"); ylabel("pitch, undirectional (deg)");
 
     axes(6) = subplot(2,3,6); 
-    plot(unsc_t, x(param.init_ind_ptr(10)+(1:N))*100,"k","LineWidth",1.2); grid on
+    plot(unsc_t, throtl*100,"k","LineWidth",1.2); grid on
     xlabel("Time since Release (s)"); ylabel("Throttle (\%)");
 end

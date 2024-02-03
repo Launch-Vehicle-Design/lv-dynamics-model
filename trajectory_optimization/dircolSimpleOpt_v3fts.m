@@ -99,7 +99,7 @@ h1st_bounds = [0.01 5]/param.scales.time;
 h2nd_bounds = [0.01 5]/param.scales.time;
 stg_sep_t_bounds = [0.01 60]/param.scales.time;
 
-N_1st = 100; N_2nd = 300;
+N_1st = 120; N_2nd = 150;
 N = N_1st+N_2nd; x0 = drop_record.x(end,:)';
 x0(2) = 80*pi/180;
 
@@ -341,7 +341,6 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
         ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
         ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
     end
-    % aug_mass_stg_sep = param.m02+param.mplf;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
     coast_dt = 0.1/param.scales.time;

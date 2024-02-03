@@ -99,7 +99,7 @@ h1st_bounds = [0.01 5]/param.scales.time;
 h2nd_bounds = [0.01 5]/param.scales.time;
 stg_sep_t_bounds = [0.01 60]/param.scales.time;
 
-N_1st = 100; N_2nd = 300;
+N_1st = 101; N_2nd = 101;
 N = N_1st+N_2nd; x0 = drop_record.x(end,:)';
 x0(2) = 80*pi/180;
 
@@ -110,9 +110,9 @@ param.dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,param,2);
 %% 1st initial guess - variable range with unified randomness
 init_x = zeros([ntot*N+3,1]); 
 param.init_ind_ptr = 0:N:ntot*N;
-init_x(ntot*N+1) = 1.2/param.scales.time; 
-init_x(ntot*N+2) = 3/param.scales.time;
-init_x(ntot*N+3) = 10/param.scales.time;
+init_x(ntot*N+1) = 2/param.scales.time; 
+init_x(ntot*N+2) = 2/param.scales.time;
+init_x(ntot*N+3) = 6.7/param.scales.time;
 init_x(1:param.nstate*N) = reshape(repmat([param.v_final_ref param.fpa_final_ref param.alt_final_ref param.m02-param.mp2],[N,1]),[param.nstate*N,1]);
 % init_x(1:param.nstate*N) = reshape([ ...
 %     (param.v_final_ref-x0(1))*rand([N,1])+x0(1) ...
@@ -236,10 +236,6 @@ low_bound = [zeros([N,1]); -20/180*pi*ones([N,1]); zeros([N,1]); param.ms2*ones(
 upp_bound = [sqrt(param.mu/param.earthR)*ones([N,1]); pi/2*ones([N,1]); 3e5*ones([N,1]); param.m0*ones([N,1]);
     tvc_bounds(2)*ones([N,1]); throtl_bounds(2)*ones([N_1st,1]); throtl_bounds(4)*ones([N_2nd,1]);
     h1st_bounds(2); h2nd_bounds(2); stg_sep_t_bounds(2)];
-ind_lb_violate = init_x <= low_bound;
-ind_ub_violate = init_x >= upp_bound;
-init_x(ind_lb_violate) = 0.999*low_bound(ind_lb_violate);
-init_x(ind_ub_violate) = 0.999*upp_bound(ind_ub_violate);
 
 % constraint function
 nonl_con_func = @(x) nonl_con_sep(x,N_1st,N_2nd,x0,param);
@@ -339,9 +335,8 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
             reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
             reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
         ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
-        ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
+        ceq(param.nstate*(N-1)) = xcol_2nd(end,ind_jet2nd-1)+param.mplf+(dxdt_col_2nd(end,ind_jet2nd)+dxdt_col_2nd(end,ind_jet2nd-1))/2*h_2nd-xcol_2nd(end,ind_jet2nd);
     end
-    % aug_mass_stg_sep = param.m02+param.mplf;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
     coast_dt = 0.1/param.scales.time;

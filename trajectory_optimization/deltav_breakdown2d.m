@@ -1,7 +1,7 @@
 clear; clc; close all
 addpath("..\parameter_functions")
 
-file_name = "dircol_sqp_final1_scaled.mat";
+file_name = "dircol_final1_scaled.mat";
 load(file_name,"log_x","log_param");
 
 state_scaling = [1; 1; 1; 1]; time_scaling = 1;

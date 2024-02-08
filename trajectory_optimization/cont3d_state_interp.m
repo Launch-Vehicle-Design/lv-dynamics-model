@@ -3,9 +3,11 @@ function state = cont3d_state_interp(t,log_x,log_param)
 % file_name (optional), solution mat file name
 % author: Chenming Fan
 
-x0 = [0.032136009063672; 1.396263401595464; 0.001898721754591; 1];
+% x0 = [0.032136009063672; 1.396263401595464; 0.001898721754591; 1];
+x0 = [0.173977866930877; -0.000196452384873043; 0.986677513325079;
+    0.00555850916780049; -0.000636441747248759; 0.0315238679430946; 1];
 
-state = nan([4,1]);
+state = nan([log_param.nstate,1]);
 
 dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,log_param,1);
 dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,log_param,2);
@@ -87,77 +89,94 @@ state = state.*state_scaling;
     end
 
 %% FUNCTION - Dynamics of a launch vehicle
-    function [dxdt,forces] = rocket(t,x,u,param,stage)
-        % % x represents states as follows
-        % 1 - v, velocity
-        % 2 - gamma, flight path angle
-        % 3 - h, altitude
-        % 4 - d, downrange
-        % 5 - m, total mass
-
-        % % u represents control as follows
-        % 1 - delta TVC angle
-        % 2 - throttle
-
-        % % % single value dynamics
-        if size(x,1) == 1 || size(x,2) == 1
-            v = x(1); fpa = x(2); h = x(3); m = x(4);
-            tvc = u(1); throtl = u(2);
-            Rp = param.earthR;
-            % altitude governed atmosphere
-            density = param.rho(h); p = param.P(h); gh = param.g(h);
-            % aerodynamic effects
-            q = 1/2*density*v^2;
-            mach = v/sqrt(1.4*p/density);
-            Cd = CD(mach,0); D = q*param.S*Cd;
-
-            if stage == 1
-                T = throtl*param.maxT_1st;
-                mdot = T/param.Isp1/param.g(0);
-            elseif stage == 2
-                T = throtl*param.maxT_2nd;
-                mdot = T/param.Isp2/param.g(0);
-            else
-                T = 0; mdot = 0;
-            end
-
-            % differential of states
-            dxdt = zeros(size(x));
-            dxdt(1) = T*cos(tvc)/m-D/m-gh*sin(fpa);
-            dxdt(2) = T*sin(tvc)/(m*v)-(gh/v-v/(Rp+h))*cos(fpa);
-            dxdt(3) = v*sin(fpa);
-            dxdt(4) = -mdot;
-            forces = [T D];
-
-        else
-            v = x(1,:); fpa = x(2,:); h = x(3,:); m = x(4,:);
-            tvc = u(1,:); throtl = u(2,:);
-            Rp = param.earthR;
-            % altitude governed atmosphere
-            density = param.rho(h); p = param.P(h); gh = param.g(h);
-            % aerodynamic effects
-            q = 1/2.*density.*v.^2;
-            mach = v./sqrt(1.4.*p./density);
-            for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
-            D = q.*param.S.*Cd;
-
-            if stage == 1
-                T = throtl*param.maxT_1st;
-                mdot = T./param.Isp1./param.g(0);
-            elseif stage == 2
-                T = throtl*param.maxT_2nd;
-                mdot = T./param.Isp2./param.g(0);
-            else
-                T = 0; mdot = 0;
-            end
-
-            % differential of states
-            dxdt = zeros(size(x));
-            dxdt(1,:) = T.*cos(tvc)./m-D./m-gh.*sin(fpa);
-            dxdt(2,:) = T.*sin(tvc)./(m.*v)-(gh./v-v./(Rp+h)).*cos(fpa);
-            dxdt(3,:) = v.*sin(fpa);
-            dxdt(4,:) = -mdot;
-            forces = [T D];
+    function [dxdt,forces] = rocket(t,x,u,param,phase)
+    % % x represents states as follows 7x1
+    % 1:3 - r, position of the launch vehicle, iner
+    % 4:6 - v, velocity of the launch vehicle, iner
+    % 7 - m, mass of the launch vehicle
+    
+    % % u represents control as follows 4x1
+    % 1:3 - TVC direction, iner
+    % 4 - throttle
+    
+    % % % single value dynamics
+    if size(x,1) == 1 || size(x,2) == 1
+        r = x(1:3); rn = norm(r);
+        v = x(4:6); m = x(7); 
+        
+        tvc = u(1:3);
+        throtl = u(4);
+    
+        % derived parameters
+        h = rn-param.earthR;
+        rh0 = param.rho(h);
+        a = sqrt(param.gamma*param.P(h)/rh0);
+    
+        % aerodynamic drag
+        atmo_v = cross(param.OMEGA,r);
+        vrel = v - atmo_v; vreln = norm(vrel);
+        e_d = -vrel/vreln;
+        Cd = CD(vreln/a,0);
+        
+        % external forces
+        ag = -param.mu/rn^3*r;
+        Fd = 1/2*rh0*vreln^2*Cd*param.S*e_d;
+        Ft = zeros([3,1]); mdot = 0;
+        if phase == 1
+            Ft = throtl*param.maxT_1st*tvc;
+            mdot = norm(Ft)./param.Isp1./param.g(0);
+        elseif phase == 2
+            Ft = throtl*param.maxT_2nd*tvc;
+            mdot = norm(Ft)./param.Isp2./param.g(0);
         end
+        % total acceleration
+        atot = ag + (Fd + Ft)/m;
+        
+        % 1st order state differentials
+        dxdt = zeros(size(x));
+        dxdt(1:3) = v;
+        dxdt(4:6) = atot;
+        dxdt(7) = -mdot;
+    else
+        r = x(1:3,:); v = x(4:6,:); m = x(7,:);
+        tvc = u(1:3,:); throtl = u(4,:);
+        
+        % norm array
+        rn = vecnorm(r);
+    
+        % derived parameters
+        h = rn-param.earthR;
+        rh0 = param.rho(h);
+        a = sqrt(param.gamma.*param.P(h)./rh0);
+    
+        % aerodynamic drag
+        atmo_v = param.skewOMEGA*r;
+        vrel = v - atmo_v; vreln = vecnorm(vrel);
+        e_d = -vrel./repmat(vreln,[3,1]);
+        mach = vreln./a;
+        for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
+    
+        % external forces
+        ag = -param.mu./rn.^3.*r;
+        Fd = 1/2.*rh0.*vreln.^2.*Cd*param.S.*e_d;
+        Ft = zeros(size(ag)); mdot = zeros(size(rn));
+        if phase == 1
+            Ft = throtl.*param.maxT_1st.*tvc;
+            mdot = vecnorm(Ft)./param.Isp1./param.g(0);
+        elseif phase == 2
+            Ft = throtl.*param.maxT_2nd.*tvc;
+            mdot = vecnorm(Ft)./param.Isp2./param.g(0);
+        end
+        % total force
+        atot = ag + (Fd + Ft)./m;
+    
+        % differential of states
+        dxdt = zeros(size(x));
+        dxdt(1:3,:) = v;
+        dxdt(4:6,:) = atot;
+        dxdt(7,:) = -mdot;
+    
+    end
+    forces = [ag; Fd; Ft];
     end
 end

@@ -7,7 +7,6 @@ set(groot,'defaultAxesFontSize',16)
 
 %% Simplified Trajectory Optimization
 % % Assumptions
-% zero angle of attack
 % zero lift generated
 % point mass launch vehicle
 
@@ -302,11 +301,11 @@ plotter(x,N_1st,N_2nd,param);
 %% FUNCTION - Cost function
 function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     N = N_1st + N_2nd;
-    % ntot = param.nstate + param.nctrl;
+    ntot = param.nstate + param.nctrl;
     % state = reshape(xopt(1:param.nstate*N),[N,param.nstate])';
-    % control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
-    f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2; % + ... % minimize fuel used
-        % weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2) + ...
+    control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
+    f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2 + ... % minimize fuel used
+        weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2); % + ...
         % weights.altf_weight*sum([(vecnor/;'m(state(1:3,1:N_1st))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+1);(vecnorm(state(1:3,N_1st+1:N))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+2)].^2) + ...
         % weights.vf_weight*sum([(vecnorm(state(4:6,1:N_1st))'-param.v_final_ref)*xopt(ntot*N+1);(vecnorm(state(4:6,N_1st+1:N))'-param.v_final_ref)*xopt(ntot*N+2)].^2);
     % weights.dutvc_weight*sum(diff([xopt(1*N+1:4*N+N_1st)*xopt(ntot*N+1);xopt(4*N+1+N_1st:5*N)*xopt(ntot*N+2)]).^2) + ...

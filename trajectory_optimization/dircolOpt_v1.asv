@@ -7,15 +7,14 @@ set(groot,'defaultAxesFontSize',16)
 
 %% Simplified Trajectory Optimization
 % % Assumptions
-% zero angle of attack
 % zero lift generated
 % point mass launch vehicle
 
-user_gues = false;
+user_gues = true;
 load_prev = true;
-load_2d = true;
+load_2d = false;
 
-m0 = 1839.3706;
+m0 = 1959.8158;
 scales.length       = 6357e3;
 scales.speed        = sqrt(3.986004418e14/6357e3);
 scales.time         = scales.length/scales.speed;
@@ -53,13 +52,13 @@ param.S = pi*(24*0.0254)^2/4/param.scales.area;
 param.mPL = 40/param.scales.mass;
 % 1st stage
 param.m0 = m0/param.scales.mass;
-param.ms1 = 96.9677/param.scales.mass;
-param.mp1 = 1394.8425/param.scales.mass;
+param.ms1 = 104.9236/param.scales.mass;
+param.mp1 = 1509.2855/param.scales.mass;
 param.Isp1 = 267.6/param.scales.time;
 % 2nd stage
-param.m02 = 347.5605/param.scales.mass;
-param.ms2 = 31.6638/param.scales.mass;
-param.mp2 = 269.8966/param.scales.mass;
+param.m02 = 345.6067/param.scales.mass;
+param.ms2 = 32.9567/param.scales.mass;
+param.mp2 = 266.6499/param.scales.mass;
 param.Isp2 = 369.5/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
@@ -109,14 +108,14 @@ stg_sep_t_bounds = [0.01 60]/param.scales.time;
 % design indirect optimization variable constrains
 param.tvc_limit = 15/180*pi;
 
-N_1st = 100; N_2nd = 150;
+N_1st = 100; N_2nd = 200;
 param.N_1st = N_1st; param.N_2nd = N_2nd;
 N = N_1st+N_2nd; x0 = drop_record.x(:,end);
-% % overwrite initial launch attitude
-% rn0 = norm(x0(1:3)); vn0 = norm(x0(4:6)); v = x0(4:6);
-% e_rx = x0(1:3)/rn0; e_bz = cross(e_rx,v)/norm(cross(e_rx,v));
-% pua = -100*pi/180; % pitch up angle
-% x0(4:6) = cos(pua)*v + sin(pua)*cross(e_bz,v) + (1-cos(pua))*dot(e_bz,v)*e_bz;
+% overwrite initial launch attitude
+rn0 = norm(x0(1:3)); vn0 = norm(x0(4:6)); v = x0(4:6);
+e_rx = x0(1:3)/rn0; e_bz = cross(e_rx,v)/norm(cross(e_rx,v));
+pua = -100*pi/180; % pitch up angle
+x0(4:6) = cos(pua)*v + sin(pua)*cross(e_bz,v) + (1-cos(pua))*dot(e_bz,v)*e_bz;
 
 % initial guess propagation
 param.dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1);
@@ -195,7 +194,7 @@ end
 end
 
 %% 3rd initial guess - load from a file with intermediate result with interpolation
-file_name = "dircol3d_final3_scaled.mat";
+file_name = "dircol3d_final1_scaled.mat";
 if load_prev && exist(file_name,"file")
     load(file_name,"log_x","log_param");
     state_scaling = ones([7 1]); time_scaling = 1;
@@ -207,7 +206,7 @@ if load_prev && exist(file_name,"file")
 end
 
 %% 4th initial guess - translate from the 2D solution
-file_name = "dircol_final1_scaled.mat";
+file_name = "dircol3d_plfj1st_final1_scaled.mat";
 if load_2d && exist(file_name,"file")
     load(file_name,"log_x","log_param");
     state_scaling = [1; 1; 1; 1]; time_scaling = 1;
@@ -274,7 +273,7 @@ disp("Initial Guess Cost Function: " + num2str(cost_func(init_x)));
 low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]); -sqrt(param.mu/param.earthR)*ones([3*N,1]); (param.m0-param.mp1)*ones([N_1st,1]); (param.m02-param.mp2)*ones([N_2nd,1]);
     -1*ones([3*N,1]); throtl_bounds(1)*ones([N_1st,1]); throtl_bounds(3)*ones([N_2nd,1]);
     h1st_bounds(1); h2nd_bounds(1); stg_sep_t_bounds(1)];
-upp_bound = [(param.earthR+2*param.alt_final_ref)*ones([3*N,1]); sqrt(param.mu/param.earthR)*ones([3*N,1]); param.m0*ones([N_1st,1]); param.m02*ones([N_2nd,1]);
+upp_bound = [(param.earthR+2*param.alt_final_ref)*ones([3*N,1]); sqrt(param.mu/param.earthR)*ones([3*N,1]); param.m0*ones([N_1st,1]); (param.m02+param.mplf)*ones([N_2nd,1]);
     ones([3*N,1]); throtl_bounds(2)*ones([N_1st,1]); throtl_bounds(4)*ones([N_2nd,1]);
     h1st_bounds(2); h2nd_bounds(2); stg_sep_t_bounds(2)];
 ind_lb_violate = init_x <= low_bound;
@@ -302,11 +301,11 @@ plotter(x,N_1st,N_2nd,param);
 %% FUNCTION - Cost function
 function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     N = N_1st + N_2nd;
-    % ntot = param.nstate + param.nctrl;
+    ntot = param.nstate + param.nctrl;
     % state = reshape(xopt(1:param.nstate*N),[N,param.nstate])';
-    % control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
-    f = -weights.mp_weight*(xopt(param.nstate*N)/param.mp2)^2; % + ... % minimize fuel used
-        % weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2) + ...
+    control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
+    f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2 + ... % minimize fuel used
+        weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2); % + ...
         % weights.altf_weight*sum([(vecnor/;'m(state(1:3,1:N_1st))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+1);(vecnorm(state(1:3,N_1st+1:N))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+2)].^2) + ...
         % weights.vf_weight*sum([(vecnorm(state(4:6,1:N_1st))'-param.v_final_ref)*xopt(ntot*N+1);(vecnorm(state(4:6,N_1st+1:N))'-param.v_final_ref)*xopt(ntot*N+2)].^2);
     % weights.dutvc_weight*sum(diff([xopt(1*N+1:4*N+N_1st)*xopt(ntot*N+1);xopt(4*N+1+N_1st:5*N)*xopt(ntot*N+2)]).^2) + ...
@@ -356,15 +355,16 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     aug_mass_stg_sep = param.m02;
     ceq(1:param.nstate*(N-1)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
         reshape((xcoldot_2nd-dxdt_col_2nd)',[param.nstate*(N_2nd-1),1])];
-    if jet_2nd
-        ind_jet2nd = ind_jet-(1+N_1st);
-        aug_mass_stg_sep = param.m02+param.mplf;
-        ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
-            reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
-            reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
-        ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
-        ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
-    end
+    % if jet_2nd
+    %     ind_jet2nd = ind_jet-(1+N_1st);
+    %     aug_mass_stg_sep = param.m02+param.mplf;
+    %     ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
+    %         reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
+    %         reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
+    %     ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
+    %     ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
+    % end
+    aug_mass_stg_sep = param.m02+param.mplf;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
     coast_dt = 0.1/param.scales.time;

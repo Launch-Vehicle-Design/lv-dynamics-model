@@ -10,10 +10,10 @@ set(groot,'defaultAxesFontSize',16)
 % zero lift generated
 % point mass launch vehicle
 
-user_gues = true;
+user_gues = false;
 load_prev = true;
-load_2d = false;
 
+% LV design mass parameter
 mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
     1802.36504864883; 93.2490477731307; 1460.90174844571];
 if exist("thumper.mat","file")
@@ -34,6 +34,12 @@ scales.pressure     = scales.force/scales.area;
 scales.gravparam    = scales.acceleration*scales.length^2;
 param.scales = scales;
 
+% pre-compute atmosphere
+h = 0:50:3e5; param.atmo_profile = atmo(h);
+param.atmo_profile.h = [param.atmo_profile.h/scales.length 10];
+param.atmo_profile.rho = [param.atmo_profile.rho/scales.density 0];
+param.atmo_profile.P = [param.atmo_profile.P/scales.pressure 0];
+
 release_lat = 80/180*pi; 
 release_long = -180/180*pi;
 release_alti = 40000*0.3048/param.scales.length;
@@ -45,7 +51,7 @@ param.earthR = 6357e3/param.scales.length;
 param.OMEGA = [0;0;2*pi/(24*3600)]*param.scales.time;
 param.skewOMEGA = [0 -param.OMEGA(3) 0; param.OMEGA(3) 0 0; 0 0 0];
 param.gamma = 1.4;
-param.g0 = 9.80665;
+param.g0 = 9.80665/param.scales.acceleration;
 
 param.S = pi*(24*0.0254)^2/4/param.scales.area;
 param.mPL = (mass_mat(1)-mass_mat(2)-mass_mat(3))/param.scales.mass;
@@ -70,10 +76,13 @@ init_r = (release_alti+param.earthR)*[cos(release_lat); 0; sin(release_lat)];
 init_v = release_velo*[0; -1; 0];
 init_cond = [init_r; init_v; param.m0];
 % PHASE 1 - uncontrolled drop phase
-zerothrust_sbfun = @(t) 0;
-drop_dt = 0.01/param.scales.time; drop_time = 5/param.scales.time;
-drop_dynfun = @(t,x,u) rocket(t,x,u,param,0,zerothrust_sbfun);
+drop_dt = 50/param.scales.time; drop_time = 50/param.scales.time;
+drop_dynfun = @(t,x,u) rocket(t,x,u,param,0);
 drop_record = rk4sim(drop_dynfun,init_cond,drop_dt,drop_time,zeros([4,1]));
+
+% % accuracy check
+% prec_drop_dt = 0.01/param.scales.time;
+% prec_drop_record = rk4sim(drop_dynfun,init_cond,prec_drop_dt,drop_time,zeros([4,1]));
 
 %% Trajectory Optimization - direct trajectory optimization
 param.v_final_ref = 7754.1/param.scales.speed;
@@ -89,18 +98,24 @@ param.plf_dropalti_ref = 140e3/param.scales.length;
 % 10N+1:10N+2 - the step length for both 1st and 2nd stage
 % 10N+3 - coast time at stage separation
 % 10N+4 - coast time after 2nd stage MECO
-% 10N+5 - throttle for 2nd stage
-% 10N+6:10N+? - parameter for solid booster thrust function
+% 10N+5:10N+5+Nu2 - throttle for 2nd stage
+% 10N+6+Nu2:10N+? - parameter for solid booster thrust function
 
-% general parameter
+% dynamic variable counts
 param.nstate = 7; param.nctrl = 3;
 ntot = param.nstate+param.nctrl;
-param.init_ind_ptr = 0:N:ntot*N;
 
+% optimization state counts
 N_1st = 100; N_2nd = 200;
 param.N_1st = N_1st;
 param.N_2nd = N_2nd;
 N = N_1st+N_2nd;
+
+% 2nd stage throttle control counts
+param.Nu2 = 5;
+
+% helper indices
+param.init_ind_ptr = 0:N:ntot*N;
 
 % cost function weighting
 weights.mp_weight = 1e2;
@@ -116,6 +131,7 @@ h2nd_bounds = [0.01 5]/param.scales.time;
 stg_sep_t_bounds = [0.01 60]/param.scales.time;
 orb_ins_t_bounds = [0.01 100]/param.scales.time;
 throtl2nd_bounds = [0.6 1];
+thrust1st_bounds = [-inf 0];
 
 % design indirect optimization variable constrains
 param.tvc_limit = 15/180*pi; % not used
@@ -130,11 +146,14 @@ x0(4:6) = cos(pua)*v + sin(pua)*cross(e_bz,v) + (1-cos(pua))*dot(e_bz,v)*e_bz;
 % design 1st stage solid rocket thrust profile (linear profile)
 % one parameter - slope in thrust/time
 thrust_1st_param = [0];
-param.thrust_1st = @(t,k) @(t) k*t+param.TtoW_1st*param.maxT_1st;
-param.nother = 5+length(thrust_1st_param);
+param.thrust_1st = @(k) @(t) k(1)*t+param.TtoW_1st*param.maxT_1st;
+param.nother = 4+param.Nu2+length(thrust_1st_param);
+
+% design 2nd stage liquid constant thrust
+throttle_2nd = 1;
 
 % initial guess propagation
-param.dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1);
+param.dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1,param.thrust_1st(thrust_1st_param));
 param.dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,param,2);
 
 %% 1st initial guess - variable range with unified randomness
@@ -143,12 +162,11 @@ init_x(ntot*N+1) = 1.8/param.scales.time;
 init_x(ntot*N+2) = 2/param.scales.time;
 init_x(ntot*N+3) = 0.7/param.scales.time;
 init_x(ntot*N+4) = 0.7/param.scales.time;
-init_x(ntot*N+5) = 1;
-init_x(ntot*N+6:end) = thrust_1st_param;
+init_x(ntot*N+5:ntot*N+4+param.Nu2) = (throtl2nd_bounds(2)-throtl2nd_bounds(1))*rand([param.Nu2,1])+throtl2nd_bounds(1);
+init_x(ntot*N+5+param.Nu2:end) = thrust_1st_param;
 init_x(1:param.nstate*N) = reshape([repmat(x0',[N_1st,1]);repmat([x0(1:end-1);param.m02]',[N_2nd,1])],[param.nstate*N,1]);
 rand_tvc = rand([3,N]);
 init_x(param.nstate*N+1:(param.nstate+3)*N) = reshape((rand_tvc./vecnorm(rand_tvc))',[3*N,1]);
-init_x((ntot-1)*N+1:ntot*N) = (throtl_bounds(2)-throtl_bounds(1))*rand([N,1])+throtl_bounds(1);
 
 %% 2nd initial guess - non-optimal educated guess
 if user_gues
@@ -211,84 +229,50 @@ if load_prev && exist(file_name,"file")
     init_x = init_guess_interp(x0,log_x,log_param,param,state_scaling,time_scaling);
 end
 
-%% 4th initial guess - translate from the 2D solution
-file_name = "dircol_final1_scaled.mat";
-if load_2d && exist(file_name,"file")
-    load(file_name,"log_x","log_param");
-    state_scaling = [1; 1; 1; 1]; time_scaling = 1;
-    if ~contains(file_name,"scaled")
-        state_scaling = [param.scales.speed; 1; param.scales.length; param.scales.mass];
-        time_scaling = param.scales.time;
-    end
-    log_N1st = log_param.N_1st; log_N2nd = log_param.N_2nd;
-    log_N = log_N1st + log_N2nd; log_ntot = log_param.nstate + log_param.nctrl;
-    log_h1st = log_x(log_ntot*log_N+1); log_h2nd = log_x(log_ntot*log_N+2);
-    log_ind_ptr = 0:log_N:ntot*log_N;
-    % reshape state and control
-    state = reshape(log_x(1:log_param.nstate*log_N),[log_N,log_param.nstate])';
-    control = reshape(log_x(log_param.nstate*log_N+1:log_ntot*log_N),[log_N,log_param.nctrl])';
-    h = state(3,:); v = state(1,:); fpa = state(2,:); m = state(4,:);
-    % translate the initial guess optimization variables
-    log_init_x = nan([ntot*log_N+3,1]);
-    % mass profile does not change
-    log_init_x(log_ind_ptr(param.nstate)+(1:log_N)) = m;
-    % downrange computation
-    ddr = v.*cos(fpa).*[log_h1st*ones([1,log_N1st]) log_h2nd*ones([1,log_N2nd])];
-    dr(1) = 0;
-    for i = 2:size(ddr,2)
-        dr(i) = trapz([ddr(i-1) ddr(i)]) + dr(i-1);
-    end
-    % position vector
-    long = -dr./(param.earthR*cos(release_lat));
-    pos = (h+param.earthR).*[
-        cos(release_lat)*cos(long);
-        cos(release_lat)*sin(long);
-        sin(release_lat)*ones(size(h))
-        ];
-    log_init_x(log_ind_ptr(1)+1:log_ind_ptr(3)+log_N) = reshape(pos',[3*log_N,1]);
-    % velocity vector
-    v_r = v.*sin(fpa).*[
-        cos(release_lat)*cos(long);
-        cos(release_lat)*sin(long);
-        sin(release_lat)*ones(size(h))
-        ];
-    v_dr = v.*cos(fpa).*[sin(long); -cos(long); zeros(size(long))];
-    log_init_x(log_ind_ptr(4)+1:log_ind_ptr(6)+log_N) = reshape((v_r+v_dr)',[3*log_N,1]);
-    % tvc vector
-    e_r = [cos(release_lat)*cos(long);cos(release_lat)*sin(long);sin(release_lat)*ones(size(h))];
-    e_dr = [sin(long);-cos(long);zeros(size(long))];
-    e_bn = cross(e_dr,e_r);
-    e_v = (v_r+v_dr)./vecnorm(v_r+v_dr);
-    tvc = cos(control(1,:)).*e_v + sin(control(1,:)).*cross(e_bn,e_v) + (1-cos(control(1,:))).*dot(e_bn,e_v).*e_bn;
-    log_init_x(log_ind_ptr(param.nstate+1)+1:log_ind_ptr(param.nstate+3)+log_N) = reshape(tvc',[3*log_N,1]);
-    % throttle
-    log_init_x(log_ind_ptr(param.nstate+param.nctrl)+(1:log_N)) = control(2,:);
-    % time translate
-    log_init_x(ntot*log_N+(1:3)) = log_x(log_ntot*log_N+(1:3));
-    init_x = log_init_x;
-end
-
+%% Initial guess plotter
 plotter3d(init_x,N_1st,N_2nd,param);
-figure; param.axes = plotter(init_x,N_1st,N_2nd,param);
+[proper_x, proper_param] = trx2prox(init_x,param);
+figure; param.axes = plotter(proper_x,proper_param);
 
-% cost function
+%% Formulating the optimization problem
+% cost function and initial cost
 cost_func = @(xopt) q_cost(xopt,N_1st,N_2nd,weights,param);
 disp("Initial Guess Cost Function: " + num2str(cost_func(init_x)));
 
-% state and control xopt bounds
-low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]); -sqrt(param.mu/param.earthR)*ones([3*N,1]); (param.m0-param.mp1)*ones([N_1st,1]); (param.m02-param.mp2)*ones([N_2nd,1]);
-    -1*ones([3*N,1]); throtl_bounds(1)*ones([N_1st,1]); throtl_bounds(3)*ones([N_2nd,1]);
-    h1st_bounds(1); h2nd_bounds(1); stg_sep_t_bounds(1)];
-upp_bound = [(param.earthR+2*param.alt_final_ref)*ones([3*N,1]); sqrt(param.mu/param.earthR)*ones([3*N,1]); param.m0*ones([N_1st,1]); (param.m02+param.mplf)*ones([N_2nd,1]);
-    ones([3*N,1]); throtl_bounds(2)*ones([N_1st,1]); throtl_bounds(4)*ones([N_2nd,1]);
-    h1st_bounds(2); h2nd_bounds(2); stg_sep_t_bounds(2)];
+% state and control lower bound
+low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
+    -sqrt(param.mu/param.earthR)*ones([3*N,1]);
+    (param.m0-param.mp1)*ones([N_1st,1]);
+    (param.m02-param.mp2)*ones([N_2nd,1]);
+    -1*ones([3*N,1]);
+    h1st_bounds(1);
+    h2nd_bounds(1);
+    stg_sep_t_bounds(1);
+    orb_ins_t_bounds(1);
+    throtl2nd_bounds(1)*ones([param.Nu2,1]);
+    thrust1st_bounds(:,1)];
+
+% state and control upper bound
+upp_bound = [(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
+    sqrt(param.mu/param.earthR)*ones([3*N,1]);
+    param.m0*ones([N_1st,1]);
+    (param.m02+param.mplf)*ones([N_2nd,1]);
+    ones([3*N,1]);
+    h1st_bounds(2);
+    h2nd_bounds(2);
+    stg_sep_t_bounds(2);
+    orb_ins_t_bounds(2);
+    throtl2nd_bounds(2)*ones([param.Nu2,1]);
+    thrust1st_bounds(:,2)];
+
+% rebound the initial guess by open interval
 ind_lb_violate = init_x <= low_bound;
 ind_ub_violate = init_x >= upp_bound;
 init_x(ind_lb_violate) = 0.999*low_bound(ind_lb_violate);
 init_x(ind_ub_violate) = 0.999*upp_bound(ind_ub_violate);
 
 % constraint function
-nonl_con_func = @(x) nonl_con_sep(x,N_1st,N_2nd,x0,param);
+nonl_con_func = @(x) nonl_con_sep(x,x0,param);
 nonl_con_func(init_x);
 
 % optimization solver setup
@@ -297,38 +281,38 @@ options = optimoptions('fmincon','Display','iter','Algorithm','interior-point',.
     EnableFeasibilityMode=true);
 x = fmincon(cost_func,init_x,[],[],[],[],low_bound,upp_bound,nonl_con_func,options);
 [csol,ceqsol] = nonl_con_sep(x,N_1st,N_2nd,x0,param);
-plotter(x,N_1st,N_2nd,param);
+[proper_x, proper_param] = trx2prox(init_x,param);
+plotter(proper_x,proper_param);
 
 %% FUNCTION - Cost function
 function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     N = N_1st + N_2nd;
-    ntot = param.nstate + param.nctrl;
-    % state = reshape(xopt(1:param.nstate*N),[N,param.nstate])';
-    control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
     f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2; % + ... % minimize fuel used
-        % weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2); % + ...
         % weights.altf_weight*sum([(vecnor/;'m(state(1:3,1:N_1st))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+1);(vecnorm(state(1:3,N_1st+1:N))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+2)].^2) + ...
         % weights.vf_weight*sum([(vecnorm(state(4:6,1:N_1st))'-param.v_final_ref)*xopt(ntot*N+1);(vecnorm(state(4:6,N_1st+1:N))'-param.v_final_ref)*xopt(ntot*N+2)].^2);
     % weights.dutvc_weight*sum(diff([xopt(1*N+1:4*N+N_1st)*xopt(ntot*N+1);xopt(4*N+1+N_1st:5*N)*xopt(ntot*N+2)]).^2) + ...
 end
 
 %% FUNCTION - Constraint function
-function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
+function [c,ceq] = nonl_con_sep(x,x0,param)
     persistent func_count;
     if isempty(func_count) func_count = 0; end
 
+    N_1st = param.N_1st; N_2nd = param.N_2nd;
     N = N_1st + N_2nd;
+    thrust_1st_param = x((param.nstate+param.nctrl)*N+5+param.Nu2:end);
+    % proper xopt translation
+    [x,param] = trx2prox(x,param);
     ntot = param.nstate + param.nctrl;
     h_1st = x(ntot*N+1); h_2nd = x(ntot*N+2);
-    coast_t = x(ntot*N+3);
+    coast_t = x(ntot*N+3); orb_ins_t = x(ntot*N+4);
 
     state = [x0 reshape(x(1:param.nstate*N),[N,param.nstate])'];
     % set the initial gimbal control to be zero degree
     control = [[x0(4:6)/norm(x0(4:6));1] reshape(x(param.nstate*N+1:ntot*N),[N,param.nctrl])'];
     ceq = nan([(param.nstate+1)*N+4,1]);
-    init_ind_ptr = param.init_ind_ptr;
 
-    dynfunc_1st_burn = param.dynfunc_1st_burn;
+    dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1,param.thrust_1st(thrust_1st_param));
     dynfunc_2nd_burn = param.dynfunc_2nd_burn;
 
     % Hermite Simpson collocation
@@ -368,15 +352,20 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % aug_mass_stg_sep = param.m02+param.mplf;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
-    coast_dt = 0.1/param.scales.time;
+    coast_dt = min([10/param.scales.time coast_t]);
     stg_sep_record = rk4sim(dynfunc_2nd_burn,state(:,N_1st+1),coast_dt,coast_t,[0;0;0;0]);
     ceq(param.nstate*(N-1)+1:param.nstate*N) = state(:,N_1st+2)-[stg_sep_record.x(1:param.nstate-1,end);aug_mass_stg_sep];
 
+    % 2nd stage MECO coast to orbit insertion
+    orb_ins_dt = min([10/param.scales.time orb_ins_t]);
+    orb_ins_record = rk4sim(dynfunc_2nd_burn,state(:,N),orb_ins_dt,orb_ins_t,[0;0;0;0]);
+    final_state = orb_ins_record.x(:,end);
+
     % final condition constraint
-    e_H = cross(state(1:3,N),state(4:6,N))/norm(cross(state(1:3,N),state(4:6,N)));
-    ceq(param.nstate*N+1) = norm(state(4:6,N))-param.v_final_ref; % final error in orbital velocity
-    ceq(param.nstate*N+2) = dot(state(1:3,N),state(4:6,N)); % zero flight path angle
-    ceq(param.nstate*N+3) = norm(state(1:3,N))-param.earthR-param.alt_final_ref; % final error in orbital altitude
+    e_H = cross(final_state(1:3),final_state(4:6))/norm(cross(final_state(1:3),final_state(4:6)));
+    ceq(param.nstate*N+1) = norm(final_state(4:6))-param.v_final_ref; % final error in orbital velocity
+    ceq(param.nstate*N+2) = dot(final_state(1:3),final_state(4:6)); % zero flight path angle
+    ceq(param.nstate*N+3) = norm(final_state(1:3))-param.earthR-param.alt_final_ref; % final error in orbital altitude
     ceq(param.nstate*N+4) = acos(dot(e_H,[0;0;1]))-param.orb_inc_final_ref; % orbit plane norm / inclination
 
     % gimbal sphere angle constraint
@@ -387,11 +376,13 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     c(:,ind_c) = param.m0-state(7,N_1st+1)-param.mp1; ind_c = ind_c+1;
     c(:,ind_c) = param.m02-state(7,N+1)-param.mp2; ind_c = ind_c+1;
     % above the ground constraint
-    c(:,ind_c:ind_c+N-1) = param.earthR-vecnorm(state(1:3,2:N+1));
+    c(:,ind_c:ind_c+N-1) = param.earthR-vecnorm(state(1:3,2:N+1)); ind_c = ind_c+N;
+    % positive 1st stage thrust constraint
+    c(:,ind_c) = -param.TtoW_1st*param.maxT_1st/(N_1st*h_1st)-thrust_1st_param;
 
     % visualization
     if mod(func_count,500) == 0
-        param.axes = plotter(x,N_1st,N_2nd,param); drawnow
+        param.axes = plotter(x,param); drawnow
     end
     func_count = func_count + 1;
 end
@@ -418,6 +409,8 @@ function [next_state,forces] = singleRK4(dynFunc,current_time,dt,current_state,c
     forces = 1/6*(F1+2*F2+2*F3+F4);
 end
 
+%% FUNCTION - 
+
 %% FUNCTION - Dynamics of a launch vehicle
 function [dxdt,forces] = rocket(t,x,u,param,phase,sb_func)
 % % x represents states as follows 7x1
@@ -436,16 +429,20 @@ function [dxdt,forces] = rocket(t,x,u,param,phase,sb_func)
 
     % derived parameters
     h = rn-param.earthR;
-    atmo_profile = atmo(h*param.scales.length);
-    rho = atmo_profile.rho/param.scales.density;
-    a = sqrt(param.gamma.*atmo_profile.P./rho/param.scales.pressure);
+    % atmo_profile = atmo(h*param.scales.length);
+    % rho = atmo_profile.rho/param.scales.density;
+    % a = sqrt(param.gamma.*atmo_profile.P./rho/param.scales.pressure);
+    rho = interp1(param.atmo_profile.h,param.atmo_profile.rho,h);
+    P = interp1(param.atmo_profile.h,param.atmo_profile.P,h);
+    a = sqrt(param.gamma.*P./rho);
 
     % aerodynamic drag
     atmo_v = param.skewOMEGA*r;
     vrel = v - atmo_v; vreln = vecnorm(vrel);
     e_d = -vrel./repmat(vreln,[3,1]);
     mach = vreln./a;
-    for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
+    Cd = 0.5*ones(size(mach));
+    % for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
 
     % external forces
     ag = -param.mu./rn.^3.*r;
@@ -487,8 +484,12 @@ function init_x = init_guess_interp(x0,log_x,log_param,param,state_scaling,time_
     % time step size
     h_1st = log_N1st*log_h1st/N_1st;
     h_2nd = (log_N2nd-1)*log_h2nd/N_2nd;
+    % 1st stage time stamp from log
+    log_time_1st = 0:log_h1st:log_h1st*log_N1st;
+    % propagate the 2nd stage throttle control
+
     % derivatives at end states
-    log_xdot_1st = param.dynfunc_1st_burn(0,log_state(:,1:log_N1st+1),log_control(:,1:log_N1st+1));
+    log_xdot_1st = param.dynfunc_1st_burn(log_time_1st,log_state(:,1:log_N1st+1),log_control(:,1:log_N1st+1));
     log_xdot_2nd = param.dynfunc_2nd_burn(0,log_state(:,log_N1st+2:end),log_control(:,log_N1st+2:end));
     % states
     C = @(h,x) [1 0 0 0; 0 1 0 0; -3/h^2 -2/h 3/h^2 -1/h; 2/h^3 1/h^2 -2/h^3 1/h^2]*x;
@@ -519,4 +520,24 @@ function init_x = init_guess_interp(x0,log_x,log_param,param,state_scaling,time_
     init_x(ntot*N+1) = h_1st;
     init_x(ntot*N+2) = h_2nd;
     init_x(ntot*N+3) = log_x(log_ntot*log_N+3)/time_scaling;
+    init_x(ntot*N+4) = 0;
+    init_x(ntot*N+5:ntot*N+9) = [1;1;1;1;1];
+    init_x(ntot*N+10) = 0;
+end
+
+%% FUNCTION - translate throttle-reduced states to proper state
+function [proper_x,proper_param] = trx2prox(x,param)
+    N_1st = param.N_1st; N_2nd = param.N_2nd;
+    N = N_1st + N_2nd; ntot = param.nctrl + param.nstate;
+    t_1st = 0:x(ntot*N+1):x(ntot*N+1)*(N_1st-1);
+    thrust_1st = param.thrust_1st(x(ntot*N+5+param.Nu2:end));
+    throtl_2nd_duration = floor(N_2nd/param.Nu2);
+    throtl_2nd = x(ntot*N+5:ntot*N+4+param.Nu2).*ones([param.Nu2 throtl_2nd_duration]);
+    proper_x = [x(1:N*ntot);
+        thrust_1st(t_1st)'/(param.TtoW_1st*param.maxT_1st);
+        reshape(throtl_2nd',[param.Nu2*throtl_2nd_duration,1]);
+        x(ntot*N+4+param.Nu2)*ones([N_2nd-throtl_2nd_duration*param.Nu2,1]);
+        x(ntot*N+(1:4))];
+    proper_param = param; proper_param.nctrl = param.nctrl+1;
+    proper_param.init_ind_ptr = 0:N:(param.nstate+param.nctrl+1)*N;
 end

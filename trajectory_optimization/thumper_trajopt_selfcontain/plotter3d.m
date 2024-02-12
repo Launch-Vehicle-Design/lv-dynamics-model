@@ -1,5 +1,6 @@
 %% FUNCTION - 3D Trajectory Plotter
-function plotter3d(x,N_1st,N_2nd,param)
+function plotter3d(x,param)
+    N_1st = param.N_1st; N_2nd = param.N_2nd;
     N = N_1st + N_2nd;
     unsc_x = x(param.init_ind_ptr(1)+(1:N))*param.scales.length;
     unsc_y = x(param.init_ind_ptr(2)+(1:N))*param.scales.length;

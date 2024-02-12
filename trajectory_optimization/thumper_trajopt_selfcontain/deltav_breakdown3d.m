@@ -1,12 +1,10 @@
-addpath("..\parameter_functions")
-
-file_name = "dircol3d_final3_scaled.mat";
+file_name = "thumper_straj_cg3dof.mat";
 load(file_name,"log_x","log_param");
 
 state_scaling = ones([7 1]); time_scaling = 1;
 S = log_param.S; maxT_1st = log_param.maxT_1st; maxT_2nd = log_param.maxT_2nd;
 Re = log_param.earthR;
-if contains(file_name,"scaled")
+if contains(file_name,"scaled") || contains(file_name,"straj")
     state_scaling = [
         log_param.scales.length*ones([3 1]);
         log_param.scales.speed*ones([3 1]);
@@ -43,19 +41,23 @@ e_vcst = state_coast(:,4:6)'./vecnorm(state_coast(:,4:6)');
 alt_1st = vecnorm(state_1st(:,1:3)')-Re; alt_2nd = vecnorm(state_2nd(:,1:3)')-Re;
 
 %% gravity loss
-g_1st = g(alt_1st); g_2nd = g(alt_2nd);
+mu = log_param.mu*log_param.scales.gravparam;
+g_1st = mu./vecnorm(state_1st(:,1:3)').^2;
+g_2nd = mu./vecnorm(state_2nd(:,1:3)').^2;
 v_gloss_1st = trapz(g_1st.*dot(e_r1st,e_v1st)*h_1st);
 v_gloss_2nd = trapz(g_2nd.*dot(e_r2nd,e_v2nd)*h_2nd);
 v_gloss_coast = trapz(g(vecnorm(state_coast(:,1:3)')-Re).*dot(e_rcst,e_vcst)*coast_time);
 v_gloss = v_gloss_1st + v_gloss_coast + v_gloss_2nd;
 
 %% drag loss
-rho_1st = rho(alt_1st); rho_2nd = rho(alt_2nd);
-p_1st = P(alt_1st); p_2nd = P(alt_1st);
-mach_1st = vecnorm(state_1st(:,4:6)')./sqrt(1.4.*p_1st./rho_1st);
-for i = 1:length(mach_1st) cd_1st(i) = CD(mach_1st(i),0); end
-mach_2nd = vecnorm(state_2nd(:,4:6)')./sqrt(1.4.*p_2nd./rho_2nd);
-for i = 1:length(mach_2nd) cd_2nd(i) = CD(mach_2nd(i),0); end
+atmo_profile_1st = atmo(alt_1st); atmo_profile_2nd = atmo(alt_2nd);
+rho_1st = atmo_profile_1st.rho; rho_2nd = atmo_profile_2nd.rho;
+p_1st = atmo_profile_1st.P; p_2nd = atmo_profile_2nd.P;
+% mach_1st = vecnorm(state_1st(:,4:6)')./sqrt(1.4.*p_1st./rho_1st);
+% for i = 1:length(mach_1st) cd_1st(i) = CD(mach_1st(i),0); end
+% mach_2nd = vecnorm(state_2nd(:,4:6)')./sqrt(1.4.*p_2nd./rho_2nd);
+% for i = 1:length(mach_2nd) cd_2nd(i) = CD(mach_2nd(i),0); end
+cd_1st = 0.5; cd_2nd = 0.5;
 drag_1st = cd_1st.*0.5.*rho_1st.*vecnorm(state_1st(:,4:6)').^2*S;
 drag_2nd = cd_2nd.*0.5.*rho_2nd.*vecnorm(state_2nd(:,4:6)').^2*S;
 v_dloss_1st = trapz(drag_1st./state_1st(:,7)'*h_1st);

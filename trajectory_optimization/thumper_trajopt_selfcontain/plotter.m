@@ -1,5 +1,6 @@
 %% FUNCTION - State and Control Plotter
-function axes = plotter(x,N_1st,N_2nd,param)
+function axes = plotter(x,param)
+    N_1st = param.N_1st; N_2nd = param.N_2nd;
     N = N_1st + N_2nd;
     ntot = param.nstate + param.nctrl;
     t_1st = 0:x(ntot*N+1):x(ntot*N+1)*(N_1st-1);

@@ -11,15 +11,17 @@ set(groot,'defaultAxesFontSize',16)
 % point mass launch vehicle
 
 user_gues = true;
-load_prev = true;
+load_prev = false;
 load_2d = false;
 
-m0 = 1959.8158;
+mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
+    1802.36504864883; 93.2490477731307; 1460.90174844571];
+
 scales.length       = 6357e3;
 scales.speed        = sqrt(3.986004418e14/6357e3);
 scales.time         = scales.length/scales.speed;
 scales.acceleration = scales.speed/scales.time;
-scales.mass         = m0;
+scales.mass         = mass_mat(4);
 scales.force        = scales.mass*scales.acceleration;
 scales.area         = scales.length^2;
 scales.volume       = scales.area.*scales.length;
@@ -51,14 +53,14 @@ param.gamma = 1.4;
 param.S = pi*(24*0.0254)^2/4/param.scales.area;
 param.mPL = 40/param.scales.mass;
 % 1st stage
-param.m0 = m0/param.scales.mass;
-param.ms1 = 104.9236/param.scales.mass;
-param.mp1 = 1509.2855/param.scales.mass;
-param.Isp1 = 267.6/param.scales.time;
+param.m0 = mass_mat(4)/param.scales.mass;
+param.ms1 = mass_mat(5)/param.scales.mass;
+param.mp1 = mass_mat(6)/param.scales.mass;
+param.Isp1 = 293.49/param.scales.time;
 % 2nd stage
-param.m02 = 345.6067/param.scales.mass;
-param.ms2 = 32.9567/param.scales.mass;
-param.mp2 = 266.6499/param.scales.mass;
+param.m02 = mass_mat(1)/param.scales.mass;
+param.ms2 = mass_mat(2)/param.scales.mass;
+param.mp2 = mass_mat(3)/param.scales.mass;
 param.Isp2 = 369.5/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
@@ -145,7 +147,7 @@ current_x = x0;
 for i = 1:N_1st
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*0.5+2*e_v;
+    guess_u = e_r*0+1*e_v;
     init_u = [guess_u/norm(guess_u); 0.8];
     dynfunc_1st = param.dynfunc_1st_burn;
     if init_x(ntot*N+1) >= 0.5/param.scales.time
@@ -176,7 +178,7 @@ init_x(param.init_ind_ptr(param.nstate+1:ntot)+N_1st+1) = init_u;
 for i = N_1st+2:N_1st+N_2nd
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*1+1*e_v;
+    guess_u = e_r*0+1*e_v;
     init_u = [guess_u/norm(guess_u); 1];
     if init_x(ntot*N+2) >= 0.5/param.scales.time
         dt_2nd = 0.01/param.scales.time;
@@ -304,8 +306,8 @@ function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     ntot = param.nstate + param.nctrl;
     % state = reshape(xopt(1:param.nstate*N),[N,param.nstate])';
     control = reshape(xopt(param.nstate*N+1:ntot*N),[N,param.nctrl])';
-    f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2 + ... % minimize fuel used
-        weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2); % + ...
+    f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2; % + ... % minimize fuel used
+        % weights.duT_weight*sum((control(end,:)-mean(control(end,:))).^2); % + ...
         % weights.altf_weight*sum([(vecnor/;'m(state(1:3,1:N_1st))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+1);(vecnorm(state(1:3,N_1st+1:N))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+2)].^2) + ...
         % weights.vf_weight*sum([(vecnorm(state(4:6,1:N_1st))'-param.v_final_ref)*xopt(ntot*N+1);(vecnorm(state(4:6,N_1st+1:N))'-param.v_final_ref)*xopt(ntot*N+2)].^2);
     % weights.dutvc_weight*sum(diff([xopt(1*N+1:4*N+N_1st)*xopt(ntot*N+1);xopt(4*N+1+N_1st:5*N)*xopt(ntot*N+2)]).^2) + ...
@@ -367,7 +369,7 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     aug_mass_stg_sep = param.m02+param.mplf;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
-    coast_dt = 0.1/param.scales.time;
+    coast_dt = min([10/param.scales.time coast_t]);
     stg_sep_record = rk4sim(dynfunc_2nd_burn,state(:,N_1st+1),coast_dt,coast_t,[0;0;0;0]);
     ceq(param.nstate*(N-1)+1:param.nstate*N) = state(:,N_1st+2)-[stg_sep_record.x(1:param.nstate-1,end);aug_mass_stg_sep];
 
@@ -483,7 +485,8 @@ else
     vrel = v - atmo_v; vreln = vecnorm(vrel);
     e_d = -vrel./repmat(vreln,[3,1]);
     mach = vreln./a;
-    for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
+    Cd = 0.5*ones(size(mach));
+    % for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
 
     % external forces
     ag = -param.mu./rn.^3.*r;

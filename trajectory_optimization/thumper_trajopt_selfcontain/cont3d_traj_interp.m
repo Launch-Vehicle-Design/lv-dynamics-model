@@ -8,18 +8,20 @@ function cont_traj = cont3d_traj_interp(t,log_x,log_param)
 x0 = log_param.x0;
 
 state = nan([log_param.nstate,1]);
-ctrl = nan([log_param.nctrl,1]);
 zero_ctrl = zeros([log_param.nctrl,1]);
 
 dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,log_param,1);
 dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,log_param,2);
 
 state_scaling = ones([log_param.nstate,1]); time_scaling = 1;
+force_scaling = ones([9,1]);
 if log_param.earthR == 1
     state_scaling = [log_param.scales.length*ones([3 1]);
         log_param.scales.speed*ones([3 1]);
         log_param.scales.mass];
     time_scaling = log_param.scales.time;
+    force_scaling = [log_param.scales.acceleration*ones([3 1]);
+        log_param.scales.force*ones([6 1])];
 end
 t = t/time_scaling;
 
@@ -36,7 +38,7 @@ log_control = [[x0(4:6)/norm(4:6);1] reshape(log_x(log_param.nstate*log_N+1:log_
 C = @(h,x) [1 0 0 0; 0 1 0 0; -3/h^2 -2/h 3/h^2 -1/h; 2/h^3 1/h^2 -2/h^3 1/h^2]*x;
 xspline = @(t,C,h) C(1,floor(t/h)+1)+C(2,floor(t/h)+1).*mod(t,h)+...
     C(3,floor(t/h)+1).*mod(t,h).^2+C(4,floor(t/h)+1).*mod(t,h).^3;
-ulinear = @(t,uk,ukp1,h) mod(t,h).*(ukp1(floor(t/h)+1)-uk(floor(t/h)+1))./h + uk(floor(t/h)+1);
+xlinear = @(t,k,kp1,h) mod(t,h).*(kp1-k)./h + k;
 
 % mission time line
 mission_tline = [log_t_drop;
@@ -51,23 +53,25 @@ if t <= mission_tline(1)
     record = rk4sim(dynfunc_1st_burn,init_cond,dt/time_scaling,residue_t,zero_ctrl);
     state = record.x(:,end);
     ctrl = [state(4:6)/norm(state(4:6)); 0];
+    force = record.force(:,end);
+    stage = 0;
 
 % 1st stage phase
 elseif t < mission_tline(2)
     ind_t = ceil((t-mission_tline(1))/log_h1st);
     residue_t = mod(t-mission_tline(1),log_h1st);
     % derivatives at end states
-    log_xdot_1st = dynfunc_1st_burn(0,log_state(:,ind_t:ind_t+1),log_control(:,ind_t:ind_t+1));
+    [log_xdot_1st,forces_1st] = dynfunc_1st_burn(0,log_state(:,ind_t:ind_t+1),log_control(:,ind_t:ind_t+1));
     for state_ind = 1:log_param.nstate
         xk = log_state(state_ind,ind_t); xkp1 = log_state(state_ind,ind_t+1);
         xdotk = log_xdot_1st(state_ind,1); xdotkp1 = log_xdot_1st(state_ind,2);
         C_1st = C(log_h1st,[xk; xdotk; xkp1; xdotkp1]);
         state(state_ind) = xspline(residue_t,C_1st,log_h1st)';
     end
-    for ctrl_ind = 1:log_param.nctrl
-        uk = log_control(ctrl_ind,ind_t); ukp1 = log_control(ctrl_ind,ind_t+1);
-        ctrl(ctrl_ind) = ulinear(residue_t,uk,ukp1,log_h1st)';
-    end
+    uk = log_control(:,ind_t); ukp1 = log_control(:,ind_t+1);
+    ctrl = xlinear(residue_t,uk,ukp1,log_h1st)';
+    force = xlinear(residue_t,forces_1st(:,2),forces_1st(:,1),log_h1st);
+    stage = 1;
 
 % coast phase
 elseif t <= mission_tline(3) 
@@ -76,28 +80,39 @@ elseif t <= mission_tline(3)
     record = rk4sim(dynfunc_2nd_burn,init_cond,dt/log_param.scales.time,residue_t,zero_ctrl);
     state = record.x(:,end);
     ctrl = [state(4:6)/norm(state(4:6)); 0];
+    force = record.force(:,end);
+    stage = 1.5;
 
 % 2nd stage phase
 elseif t < mission_tline(4)
     ind_t = ceil((t-mission_tline(3))/log_h2nd);
     residue_t = mod(t-mission_tline(3),log_h2nd);
     % derivatives at end states
-    log_xdot_2nd = dynfunc_2nd_burn(0,log_state(:,log_N1st+ind_t+1:log_N1st+ind_t+2),log_control(:,log_N1st+ind_t+1:log_N1st+ind_t+2));
+    [log_xdot_2nd,forces_2nd] = dynfunc_2nd_burn(0,log_state(:,log_N1st+ind_t+1:log_N1st+ind_t+2),log_control(:,log_N1st+ind_t+1:log_N1st+ind_t+2));
     for state_ind = 1:log_param.nstate
         xk = log_state(state_ind,log_N1st+ind_t+1); xkp1 = log_state(state_ind,log_N1st+2+ind_t);
         xdotk = log_xdot_2nd(state_ind,1); xdotkp1 = log_xdot_2nd(state_ind,2);
         C_2nd = C(log_h2nd,[xk; xdotk; xkp1; xdotkp1]);
         state(state_ind) = xspline(residue_t,C_2nd,log_h2nd)';
     end
-    for ctrl_ind = 1:log_param.nctrl
-        uk = log_control(ctrl_ind,log_N1st+ind_t); ukp1 = log_control(ctrl_ind,log_N1st+2+ind_t);
-        ctrl(ctrl_ind) = ulinear(residue_t,uk,ukp1,log_h2nd)';
-    end
+    uk = log_control(:,log_N1st+ind_t); ukp1 = log_control(:,log_N1st+2+ind_t);
+    ctrl = xlinear(residue_t,uk,ukp1,log_h2nd)';
+    force = xlinear(residue_t,forces_2nd(:,2),forces_2nd(:,1),log_h1st);
+    stage = 2;
 else
     state = log_state(:,end);
+    ctrl = [state(4:6)/norm(state(4:6)); 0];
+    force = zeros([9,1]);
+    stage = 3;
 end
 state = state.*state_scaling;
+force = force.*force_scaling;
 
 cont_traj.state = state;
 cont_traj.ctrl = ctrl;
+cont_traj.force = force;
+cont_traj.stage = stage;
+cont_traj.scales.state = state_scaling;
+cont_traj.scales.force = force_scaling;
+cont_traj.scales.time = time_scaling;
 end

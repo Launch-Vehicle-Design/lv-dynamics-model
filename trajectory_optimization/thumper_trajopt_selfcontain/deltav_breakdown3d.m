@@ -74,10 +74,18 @@ v_sloss = v_sloss_1st + v_sloss_2nd;
 
 %% total delta v
 vloss = v_gloss + v_dloss + v_sloss;
-deltav_1st = log_param.Isp1*g(0)*log(state_1st(1,4)/state_1st(end,4));
-deltav_2nd = log_param.Isp2*g(0)*log(state_2nd(1,4)/state_2nd(end,4));
+g0 = log_param.g0*log_param.scales.acceleration;
+Isp1 = log_param.Isp1*log_param.scales.time;
+Isp2 = log_param.Isp2*log_param.scales.time;
+deltav_1st = Isp1*g0*log(state_1st(1,end)/state_1st(end,end));
+deltav_2nd = Isp2*g0*log(state_2nd(1,end)/state_2nd(end,end));
 deltav = deltav_1st + deltav_2nd;
 
-design_dv_1st = log_param.Isp1*g(0)*log(log_param.m0/(log_param.m0-log_param.mp1));
-design_dv_2nd = log_param.Isp2*g(0)*log(log_param.m02/(log_param.m02-log_param.mp2));
+design_dv_1st = Isp1*g0*log(log_param.m0/(log_param.m0-log_param.mp1));
+design_dv_2nd = Isp2*g0*log(log_param.m02/(log_param.m02-log_param.mp2));
 design_dv = design_dv_1st + design_dv_2nd;
+
+disp("##### Delta V Breakdown from Trajectory #####")
+disp("Total Delta V Loss (m/s): " + vloss)
+disp("Total Delta V Spend (m/s): " + deltav)
+disp("Total Delta V Designed (m/s): " + design_dv)

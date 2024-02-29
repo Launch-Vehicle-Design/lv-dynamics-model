@@ -27,25 +27,25 @@ function axes = plotter(x,param)
     plot(unsc_t,vecnorm([unsc_x unsc_y unsc_z]')-param.earthR*param.scales.length,"k","LineWidth",1.2); grid on;
     % plot(unsc_t, unsc_x,"r","LineWidth",1.2); grid on; hold on;
     % plot(unsc_t, unsc_y,"b","LineWidth",1.2); plot(unsc_t, unsc_z,"k","LineWidth",1.2);
-    xlabel("Time since Release (s)"); ylabel("Vehicle Position (m)"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Vehicle Altitude (m)"); hold off;
 
     axes(2) = subplot(2,3,2);
     plot(unsc_t,vecnorm([unsc_vx unsc_vy unsc_vz]'),"k","LineWidth",1.2); grid on;
     % plot(unsc_t, unsc_vx,"r","LineWidth",1.2); grid on; hold on;
     % plot(unsc_t, unsc_vy,"b","LineWidth",1.2); plot(unsc_t, unsc_vz,"k","LineWidth",1.2);
-    xlabel("Time since Release (s)"); ylabel("Vehicle Velocity (m/s)"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Vehicle Speed (m/s)"); hold off;
 
     axes(3) = subplot(2,3,3); 
     plot(unsc_t, x(param.init_ind_ptr(7)+(1:N))*param.scales.mass,"k","LineWidth",1.2); grid on
     xlabel("Time since Release (s)"); ylabel("Vehicle Mass (kg)");
 
     axes(4) = subplot(2,3,4); 
-    plot(unsc_t, unsc_ux*180/pi,"r","LineWidth",1.2); grid on; hold on;
-    plot(unsc_t, unsc_uy*180/pi,"b","LineWidth",1.2);
+    plot(unsc_t, unsc_ux,"r","LineWidth",1.2); hold on;
+    plot(unsc_t, unsc_uy,"b","LineWidth",1.2); grid on;
     if length(param.init_ind_ptr) == 12
-        plot(unsc_t, unsc_uz*180/pi,"k","LineWidth",1.2);
+        plot(unsc_t, unsc_uz,"k","LineWidth",1.2);
     end
-    xlabel("Time since Release (s)"); ylabel("Gimbal Angle (deg)"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Thrust Vector Direction"); hold off;
 
     axes(5) = subplot(2,3,5);
     plot(unsc_t,(pi/2-acos(pitch_ang))*180/pi,"k","LineWidth",1.2); grid on

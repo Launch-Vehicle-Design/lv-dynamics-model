@@ -3,14 +3,14 @@ set(0,'DefaultTextInterpreter','latex')
 set(0,'DefaultFigureColor',[1,1,1])
 set(groot,'defaultAxesFontSize',16)
 
-file_name = "thumper_straj_cg3dof.mat";
+file_name = "thumper_straj_cgp3dof.mat";
 if exist(file_name,"file")
     load(file_name,"log_x","log_param");
 end
 
 % set mission time since the drop
-dt = 0.01;
-tf = 600;
+dt = 1;
+tf = 700;
 t = 0:dt:tf;
 init_cond = log_param.init_cond;
 x0 = log_param.x0;
@@ -29,7 +29,7 @@ end
 % dynamic propagation
 dt_dyn = dt/cont_traj.scales.time;
 t_dyn = t./cont_traj.scales.time;
-states_dyn = nan([log_param.nstate,length(t)]);
+states_dyn = nan([log_param.nstate,length(t_dyn)]);
 
 dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,log_param,1);
 dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,log_param,2);
@@ -69,4 +69,4 @@ xlabel("Time since Release (s)"); ylabel("Vehicle Mass (kg)");
 subplot(2,2,4);
 plot(t,pa*180/pi,"k","LineWidth",1.2); hold on
 plot(t,pa_dyn*180/pi,"b","LineWidth",1.2); grid on
-xlabel("Time since Release (s)"); ylabel("Pitch Angle (deg)");
+xlabel("Time since Release (s)"); ylabel("TVC Angle (deg)");

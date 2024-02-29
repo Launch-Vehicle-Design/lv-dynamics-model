@@ -1,5 +1,4 @@
 clear; clc; close all
-addpath("..\parameter_functions")
 
 set(0,'DefaultTextInterpreter','latex')
 set(0,'DefaultFigureColor',[1,1,1])
@@ -14,18 +13,30 @@ user_gues = false;
 load_prev = true;
 
 % LV design mass parameter
+top_down_filename = "thumper.mat";
+bottom_up_filename = "vehicle_sizing.mat";
+prev_file_name = "thumper_straj_cgp3dof1.mat";
+top_down_mass = false;
+
+% top down mass
 mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
     1802.36504864883; 93.2490477731307; 1460.90174844571];
-if exist("thumper.mat","file")
-    load("thumper.mat","optimal","dvdisb");
+if exist(top_down_filename,"file")
+    load(top_down_filename,"optimal","dvdisb");
     mass_mat = [optimal(1:3); optimal(6:8)];
+    mass_scale = mass_mat(4);
+end
+if exist(bottom_up_filename,"file")
+    load(bottom_up_filename,"vehicle_sizing");
+    mass_scale = vehicle_sizing.mass(3);
 end
 
-scales.length       = 6357e3;
-scales.speed        = sqrt(3.986004418e14/6357e3);
+earth_radius = 6378e3;
+scales.length       = earth_radius;
+scales.speed        = sqrt(3.986004418e14/earth_radius);
 scales.time         = scales.length/scales.speed;
 scales.acceleration = scales.speed/scales.time;
-scales.mass         = mass_mat(4);
+scales.mass         = mass_scale;
 scales.force        = scales.mass*scales.acceleration;
 scales.area         = scales.length^2;
 scales.volume       = scales.area.*scales.length;
@@ -34,39 +45,42 @@ scales.pressure     = scales.force/scales.area;
 scales.gravparam    = scales.acceleration*scales.length^2;
 param.scales = scales;
 
-% pre-compute atmosphere
-h = 0:50:3e5; param.atmo_profile = atmo(h);
-param.atmo_profile.h = [param.atmo_profile.h/scales.length 10];
-param.atmo_profile.rho = [param.atmo_profile.rho/scales.density 0];
-param.atmo_profile.P = [param.atmo_profile.P/scales.pressure 0];
-
-release_lat = 80/180*pi; 
+release_lat = 80/180*pi;
 release_long = -180/180*pi;
 release_alti = 40000*0.3048/param.scales.length;
 release_velo = 250.786/param.scales.speed;
 
+% general parameter
+param.nstate = 7;
+param.nctrl = 4;
+
 % environmental parameter
 param.mu = 3.986004418e14/param.scales.gravparam;
-param.earthR = 6357e3/param.scales.length;
+param.earthR = earth_radius/param.scales.length;
 param.OMEGA = [0;0;2*pi/(24*3600)]*param.scales.time;
 param.skewOMEGA = [0 -param.OMEGA(3) 0; param.OMEGA(3) 0 0; 0 0 0];
 param.gamma = 1.4;
 param.g0 = 9.80665/param.scales.acceleration;
 
 param.S = pi*(24*0.0254)^2/4/param.scales.area;
-param.mPL = (mass_mat(1)-mass_mat(2)-mass_mat(3))/param.scales.mass;
-% 1st stage
-param.m0 = mass_mat(4)/param.scales.mass;
-param.ms1 = mass_mat(5)/param.scales.mass;
-param.mp1 = mass_mat(6)/param.scales.mass;
-param.Isp1 = 293.49/param.scales.time;
-% 2nd stage
-param.m02 = mass_mat(1)/param.scales.mass;
-param.ms2 = mass_mat(2)/param.scales.mass;
-param.mp2 = mass_mat(3)/param.scales.mass;
+if top_down_mass
+    param.mPL = (mass_mat(1)-mass_mat(2)-mass_mat(3))/param.scales.mass;
+    % 1st stage
+    param.m0 = mass_mat(4)/param.scales.mass;
+    param.ms1 = mass_mat(5)/param.scales.mass;
+    param.mp1 = mass_mat(6)/param.scales.mass;
+    % 2nd stage
+    param.m02 = mass_mat(1)/param.scales.mass;
+    param.ms2 = mass_mat(2)/param.scales.mass;
+    param.mp2 = mass_mat(3)/param.scales.mass;
+else
+    param = extract_bottomup(vehicle_sizing,param);
+end
+param.Isp1 = 286.6/param.scales.time;
 param.Isp2 = 369.5/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
+param.aug_mass_stg_sep = param.m02 + param.mplf;
 
 param.TtoW_1st = 1.6; param.TtoW_2nd = 0.8;
 param.maxT_1st = param.TtoW_1st*param.m0*param.g0;
@@ -80,16 +94,14 @@ drop_dt = 50/param.scales.time; drop_time = 50/param.scales.time;
 drop_dynfun = @(t,x,u) rocket(t,x,u,param,0);
 drop_record = rk4sim(drop_dynfun,init_cond,drop_dt,drop_time,zeros([4,1]));
 
-% % accuracy check
-% prec_drop_dt = 0.01/param.scales.time;
-% prec_drop_record = rk4sim(drop_dynfun,init_cond,prec_drop_dt,drop_time,zeros([4,1]));
-
 %% Trajectory Optimization - direct trajectory optimization
 param.v_final_ref = 7754.1/param.scales.speed;
 param.alt_final_ref = 251460/param.scales.length;
 param.fpa_final_ref = 0;
 param.orb_inc_final_ref = 100/180*pi;
 param.plf_dropalti_ref = 140e3/param.scales.length;
+% constraint reference
+param.max_gload = 6;
 
 % xopt represents state and control trajectory of the system
 % with total length of 7*N+1
@@ -153,7 +165,7 @@ param.nother = 4+param.Nu2+length(thrust_1st_param);
 throttle_2nd = 1;
 
 % initial guess propagation
-param.dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1,param.thrust_1st(thrust_1st_param));
+param.dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1);
 param.dynfunc_2nd_burn = @(t,x,u) rocket(t,x,u,param,2);
 
 %% 1st initial guess - variable range with unified randomness
@@ -230,7 +242,7 @@ if load_prev && exist(file_name,"file")
 end
 
 %% Initial guess plotter
-plotter3d(init_x,N_1st,N_2nd,param);
+plotter3d(init_x,param);
 [proper_x, proper_param] = trx2prox(init_x,param);
 figure; param.axes = plotter(proper_x,proper_param);
 
@@ -312,7 +324,7 @@ function [c,ceq] = nonl_con_sep(x,x0,param)
     control = [[x0(4:6)/norm(x0(4:6));1] reshape(x(param.nstate*N+1:ntot*N),[N,param.nctrl])'];
     ceq = nan([(param.nstate+1)*N+4,1]);
 
-    dynfunc_1st_burn = @(t,x,u) rocket(t,x,u,param,1,param.thrust_1st(thrust_1st_param));
+    dynfunc_1st_burn = param.dynfunc_1st_burn;
     dynfunc_2nd_burn = param.dynfunc_2nd_burn;
 
     % Hermite Simpson collocation
@@ -385,87 +397,6 @@ function [c,ceq] = nonl_con_sep(x,x0,param)
         param.axes = plotter(x,param); drawnow
     end
     func_count = func_count + 1;
-end
-
-%% FUNCTION - Generalized RK4 solver for a dynamic equation
-function record = rk4sim(dynFunc,init_cond,dt,tf,u_hist)
-    t0 = 0; x = init_cond; forces = zeros([9,1]);
-    t_hist = t0:dt:tf; x_hist = init_cond; force_hist = forces;
-    for i = 1:size(t_hist,2)
-        t = t_hist(i); x_hist(:,i) = x; force_hist(:,i) = forces;
-        if i <= size(u_hist,2) u = u_hist(:,i); else u = zeros([4,1]); end
-        [x,forces] = singleRK4(dynFunc,t,dt,x,u);
-    end
-    record.t = t_hist; record.x = x_hist; record.force = force_hist;
-end
-
-%% FUNCTION - single RK4 step
-function [next_state,forces] = singleRK4(dynFunc,current_time,dt,current_state,current_control)
-    [k1,F1] = dynFunc(current_time,current_state,current_control);
-    [k2,F2] = dynFunc(current_time+dt/2,current_state+k1*dt/2,current_control);
-    [k3,F3] = dynFunc(current_time+dt/2,current_state+k2*dt/2,current_control);
-    [k4,F4] = dynFunc(current_time+dt,current_state+k3*dt,current_control);
-    next_state = current_state + 1/6*dt*(k1+2*k2+2*k3+k4);
-    forces = 1/6*(F1+2*F2+2*F3+F4);
-end
-
-%% FUNCTION - 
-
-%% FUNCTION - Dynamics of a launch vehicle
-function [dxdt,forces] = rocket(t,x,u,param,phase,sb_func)
-% % x represents states as follows 7x1
-% 1:3 - r, position of the launch vehicle, iner
-% 4:6 - v, velocity of the launch vehicle, iner
-% 7 - m, mass of the launch vehicle
-
-% % u represents control as follows 3x1
-% 1:3 - TVC direction, iner
-
-    r = x(1:3,:); v = x(4:6,:); m = x(7,:);
-    tvc = u(1:3,:);
-    
-    % norm array
-    rn = vecnorm(r);
-
-    % derived parameters
-    h = rn-param.earthR;
-    % atmo_profile = atmo(h*param.scales.length);
-    % rho = atmo_profile.rho/param.scales.density;
-    % a = sqrt(param.gamma.*atmo_profile.P./rho/param.scales.pressure);
-    rho = interp1(param.atmo_profile.h,param.atmo_profile.rho,h);
-    P = interp1(param.atmo_profile.h,param.atmo_profile.P,h);
-    a = sqrt(param.gamma.*P./rho);
-
-    % aerodynamic drag
-    atmo_v = param.skewOMEGA*r;
-    vrel = v - atmo_v; vreln = vecnorm(vrel);
-    e_d = -vrel./repmat(vreln,[3,1]);
-    mach = vreln./a;
-    Cd = 0.5*ones(size(mach));
-    % for i = 1:length(mach) Cd(i) = CD(mach(i),0); end
-
-    % external forces
-    ag = -param.mu./rn.^3.*r;
-    Fd = 1/2.*rho.*vreln.^2.*Cd*param.S.*e_d;
-    Ft = zeros(size(ag)); mdot = zeros(size(rn));
-    if phase == 1
-        Ft = sb_func(t).*tvc;
-        mdot = vecnorm(Ft)./param.Isp1./param.g0;
-    elseif phase == 2
-        throtl = u(4,:);
-        Ft = throtl.*param.maxT_2nd.*tvc;
-        mdot = vecnorm(Ft)./param.Isp2./param.g0;
-    end
-    % total force
-    atot = ag + (Fd + Ft)./m;
-
-    % differential of states
-    dxdt = zeros(size(x));
-    dxdt(1:3,:) = v;
-    dxdt(4:6,:) = atot;
-    dxdt(7,:) = -mdot;
-
-    forces = [ag; Fd; Ft];
 end
 
 %% FUNCTION - initial guess interpolation from previous result

@@ -15,8 +15,8 @@ load_prev = true;
 do_orb_ins_c = false;
 top_down_filename = "thumper.mat";
 bottom_up_filename = "vehicle_sizing.mat";
-prev_file_name = "thumper_straj_cgp3dof.mat";
-top_down_mass = true;
+prev_file_name = "thumper_straj_cgl3dof.mat";
+top_down_mass = false;
 
 % top down mass
 mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
@@ -80,9 +80,9 @@ param.Isp1 = 286.6/param.scales.time;
 param.Isp2 = 369.5/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
-param.mstgsep = param.m02 + param.mplf;
+param.aug_mass_stg_sep = param.m02 + param.mplf;
 
-param.TtoW_1st = 1.6; param.TtoW_2nd = 0.8;
+param.TtoW_1st = 1.5; param.TtoW_2nd = 0.8;
 param.maxT_1st = param.TtoW_1st*param.m0*param.g0;
 param.maxT_2nd = param.TtoW_2nd*param.m02*param.g0;
 
@@ -129,19 +129,19 @@ weights.time_weight = 100;
 throtl_bounds = [0.6 1 0.6 1];
 h1st_bounds = [0.01 30]/param.scales.time;
 h2nd_bounds = [0.01 30]/param.scales.time;
-stg_sep_t_bounds = [2 60]/param.scales.time;
+stg_sep_t_bounds = [0.01 60]/param.scales.time;
 orb_ins_t_bounds = [0 100]/param.scales.time;
 
 % design indirect optimization variable constrains
 param.tvc_limit = 15/180*pi;
 
-N_1st = 10; N_2nd = 20;
+N_1st = 50; N_2nd = 50;
 param.N_1st = N_1st; param.N_2nd = N_2nd;
 N = N_1st+N_2nd; x0 = drop_record.x(:,end);
 % overwrite initial launch attitude
 rn0 = norm(x0(1:3)); vn0 = norm(x0(4:6)); v = x0(4:6);
 e_rx = x0(1:3)/rn0; e_bz = cross(e_rx,v)/norm(cross(e_rx,v));
-pua = -90*pi/180; % pitch up angle
+pua = -30*pi/180; % pitch up angle
 x0(4:6) = cos(pua)*v + sin(pua)*cross(e_bz,v) + (1-cos(pua))*dot(e_bz,v)*e_bz;
 
 % initial guess propagation
@@ -168,7 +168,7 @@ dt_throtl = 0.1/param.scales.time;
 for i = 1:N_1st
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*1+5*e_v;
+    guess_u = e_r*1+2*e_v;
     init_u = [guess_u/norm(guess_u); 0.8];
     dynfunc_1st = param.dynfunc_1st_burn;
     if init_x(ntot*N+1) >= dt_throtl
@@ -188,13 +188,13 @@ dynfunc_2nd = param.dynfunc_2nd_burn;
 stg_sep_record = rk4sim(dynfunc_2nd,current_x,0.01/param.scales.time,init_x(ntot*N+3),[0;0;0;0]);
 current_x = stg_sep_record.x(:,end);
 init_u = [current_x(4:6)/norm(current_x(4:6)); 1];
-current_x(param.nstate) = param.mstgsep;
+current_x(param.nstate) = param.aug_mass_stg_sep;
 init_x(param.init_ind_ptr(1:param.nstate)+N_1st+1) = current_x;
 init_x(param.init_ind_ptr(param.nstate+1:ntot)+N_1st+1) = init_u;
 for i = N_1st+2:N_1st+N_2nd
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*1+10*e_v;
+    guess_u = e_r*1+2*e_v;
     init_u = [guess_u/norm(guess_u); 1];
     if init_x(ntot*N+2) >= dt_throtl
         dt_2nd = dt_throtl;
@@ -203,7 +203,7 @@ for i = N_1st+2:N_1st+N_2nd
         current_x = record.x(:,end);
     else
         u = init_u;
-        if param.mstgsep - current_x(end) >= param.mp2 u(2) = 0; end
+        if param.aug_mass_stg_sep - current_x(end) >= param.mp2 u(2) = 0; end
         current_x = singleRK4(dynfunc_2nd,0,init_x(ntot*N+2),current_x,u);
     end
     init_x(param.init_ind_ptr(1:param.nstate)+i) = current_x;
@@ -233,7 +233,7 @@ disp("Initial Guess Cost Function: " + num2str(cost_func(init_x)));
 low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
     -sqrt(param.mu/param.earthR)*ones([3*N,1]);
     (param.m0-param.mp1)*ones([N_1st,1]);
-    (param.mstgsep-param.mp2)*ones([N_2nd,1]);
+    (param.aug_mass_stg_sep-param.mp2)*ones([N_2nd,1]);
     -1*ones([3*N,1]);
     throtl_bounds(1)*ones([N_1st,1]);
     throtl_bounds(3)*ones([N_2nd,1]);
@@ -245,7 +245,7 @@ low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
 upp_bound = [(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
     sqrt(param.mu/param.earthR)*ones([3*N,1]);
     param.m0*ones([N_1st,1]);
-    param.mstgsep*ones([N_2nd,1]);
+    param.aug_mass_stg_sep*ones([N_2nd,1]);
     ones([3*N,1]);
     throtl_bounds(2)*ones([N_1st,1]);
     throtl_bounds(4)*ones([N_2nd,1]);
@@ -268,11 +268,11 @@ nonl_con_func = @(x) nonl_con_sep(x,N_1st,N_2nd,x0,param);
 nonl_con_func(init_x);
 
 % optimization solver setup
-options = optimoptions('fmincon','Display','iter-detailed','Algorithm','interior-point',...
+options = optimoptions('fmincon','Display','iter','Algorithm','interior-point',...
     "SubproblemAlgorithm","cg",'MaxFunctionEvaluations',1e8,'MaxIterations',1000,...
     EnableFeasibilityMode=true);
-options = optimoptions('fmincon','Display','iter','Algorithm','interior-point',...
-    'MaxFunctionEvaluations',1e8,'MaxIterations',1e5);
+% options = optimoptions('fmincon','Display','iter','Algorithm','interior-point',...
+%     'MaxFunctionEvaluations',1e8,'MaxIterations',1000);
 % options = optimoptions('fmincon','Display','iter','Algorithm','sqp',...
 %     "SubproblemAlgorithm","cg",'MaxFunctionEvaluations',1e8,'MaxIterations',100,...
 %     'ConstraintTolerance',1e-4);
@@ -336,11 +336,12 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % compute continous time dynamics at once for colloction states
     [dxdt_col_1st,force_col_1st] = dynfunc_1st_burn(0,xcol_1st,ucol_1st);
     [dxdt_col_2nd,force_col_2nd] = dynfunc_2nd_burn(0,xcol_2nd,ucol_2nd);
+    aug_mass_stg_sep = param.aug_mass_stg_sep;
     ceq(1:param.nstate*(N-1)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
         reshape((xcoldot_2nd-dxdt_col_2nd)',[param.nstate*(N_2nd-1),1])];
     % if jet_2nd
     %     ind_jet2nd = ind_jet-(1+N_1st);
-    %     mstgsep = param.m02+param.mplf;
+    %     aug_mass_stg_sep = param.m02+param.mplf;
     %     ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
     %         reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
     %         reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
@@ -351,7 +352,7 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
     coast_dt = min([10/param.scales.time coast_t]);
     stg_sep_record = rk4sim(dynfunc_2nd_burn,state(:,N_1st+1),coast_dt,coast_t,[0;0;0;0]);
-    ceq(param.nstate*(N-1)+1:param.nstate*N) = state(:,N_1st+2)-[stg_sep_record.x(1:param.nstate-1,end); param.mstgsep];
+    ceq(param.nstate*(N-1)+1:param.nstate*N) = state(:,N_1st+2)-[stg_sep_record.x(1:param.nstate-1,end);aug_mass_stg_sep];
 
     % 2nd stage MECO coast to orbit insertion
     final_state = state(:,N);
@@ -375,7 +376,7 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % propellant usage constraint
     ind_c = 1;
     c(:,ind_c) = param.m0-state(7,N_1st+1)-param.mp1; ind_c = ind_c+1;
-    c(:,ind_c) = param.mstgsep-state(7,N+1)-param.mp2; ind_c = ind_c+1;
+    c(:,ind_c) = aug_mass_stg_sep-state(7,N+1)-param.mp2; ind_c = ind_c+1;
 
     % above the ground constraint
     c(:,ind_c:ind_c+N-1) = param.earthR-vecnorm(state(1:3,2:N+1)); ind_c = ind_c+N;

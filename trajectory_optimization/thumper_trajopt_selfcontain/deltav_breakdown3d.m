@@ -1,4 +1,4 @@
-file_name = "thumper_straj_cg3dof.mat";
+file_name = "thumper_straj_cgp3dof.mat";
 load(file_name,"log_x","log_param");
 
 state_scaling = ones([7 1]); time_scaling = 1;
@@ -44,9 +44,10 @@ alt_1st = vecnorm(state_1st(:,1:3)')-Re; alt_2nd = vecnorm(state_2nd(:,1:3)')-Re
 mu = log_param.mu*log_param.scales.gravparam;
 g_1st = mu./vecnorm(state_1st(:,1:3)').^2;
 g_2nd = mu./vecnorm(state_2nd(:,1:3)').^2;
+g_coast = mu./vecnorm(state_coast(:,1:3)').^2;
 v_gloss_1st = trapz(g_1st.*dot(e_r1st,e_v1st)*h_1st);
 v_gloss_2nd = trapz(g_2nd.*dot(e_r2nd,e_v2nd)*h_2nd);
-v_gloss_coast = trapz(g(vecnorm(state_coast(:,1:3)')-Re).*dot(e_rcst,e_vcst)*coast_time);
+v_gloss_coast = trapz(g_coast.*dot(e_rcst,e_vcst)*coast_time);
 v_gloss = v_gloss_1st + v_gloss_coast + v_gloss_2nd;
 
 %% drag loss

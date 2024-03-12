@@ -1,13 +1,12 @@
-function param = sysparam()
-mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
-    1802.36504864883; 93.2490477731307; 1460.90174844571];
-if exist("thumper.mat","file")
-    load("thumper.mat","optimal");
-    mass_mat = [optimal(1:3); optimal(6:8)];
-end
-if exist("Vehicle_Dimentions.mat","file")
-    load("Vehicle_Dimentions.mat","vehicle_sizing");
-end
+function param = sysparam
+% file names
+top_down_filename = "thumper.mat";
+bottom_up_filename = "vehicle_sizing.mat";
+
+% top down mass
+load(top_down_filename,"optimal");
+load(bottom_up_filename,"vehicle_sizing");
+mass_mat = [optimal(1:3); optimal(6:8)];
 
 % environmental parameter
 param.mu = 3.986004418e14;
@@ -24,7 +23,7 @@ param.Isp2 = 369.5;
 param.OFratio = 1.325;
 param.mass_mat = mass_mat;
 param.vehicle_sizing = vehicle_sizing;
-param = bottonup(vehicle_sizing,param);
+param = extract_bottomup(vehicle_sizing,param);
 
 % basic thrust parameter
 param.TtoW_1st = 1.6; 

@@ -4,7 +4,7 @@ set(0,'DefaultFigureColor',[1,1,1])
 set(groot,'defaultAxesFontSize',16)
 
 param = sysparam()
-file_name = "thumper_straj_cg3dof.mat";
+file_name = "thumper_straj_cgp3dof.mat";
 if exist(file_name,"file")
     load(file_name,"log_x","log_param");
 end

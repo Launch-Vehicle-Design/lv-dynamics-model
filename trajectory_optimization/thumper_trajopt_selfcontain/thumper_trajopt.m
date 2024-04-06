@@ -9,14 +9,14 @@ set(groot,'defaultAxesFontSize',16)
 % zero lift generated
 % point mass launch vehicle
 
-user_gues = true;
+user_gues = false;
 load_prev = true;
 
 do_orb_ins_c = false;
 top_down_filename = "thumper.mat";
 bottom_up_filename = "vehicle_sizing.mat";
 prev_file_name = "thumper_straj_cgp3dof.mat";
-top_down_mass = true;
+top_down_mass = false;
 
 % top down mass
 mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
@@ -76,7 +76,7 @@ if top_down_mass
 else
     param = extract_bottomup(vehicle_sizing,param);
 end
-param.Isp1 = 286.6/param.scales.time;
+param.Isp1 = 278/param.scales.time;
 param.Isp2 = 369.5/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
@@ -87,7 +87,7 @@ param.maxT_1st = param.TtoW_1st*param.m0*param.g0;
 param.maxT_2nd = param.TtoW_2nd*param.m02*param.g0;
 
 init_r = (release_alti+param.earthR)*[cos(release_lat); 0; sin(release_lat)];
-init_v = release_velo*[0; -1; 0];
+init_v = release_velo*[0; -1; 0] + param.skewOMEGA*init_r;
 init_cond = [init_r; init_v; param.m0];
 % PHASE 1 - uncontrolled drop phase
 drop_dt = 0.1/param.scales.time; drop_time = 5/param.scales.time;
@@ -104,6 +104,7 @@ param.orb_inc_final_ref = 100/180*pi;
 param.plf_dropalti_ref = 140e3/param.scales.length;
 % constraint reference
 param.max_gload = 6;
+param.air_clearance = [3.2e3 40000*0.3048 1]/param.scales.length;
 
 % xopt represents state and control trajectory of the system
 % with total length of 11*N+3(4)
@@ -129,19 +130,19 @@ weights.time_weight = 100;
 throtl_bounds = [0.6 1 0.6 1];
 h1st_bounds = [0.01 30]/param.scales.time;
 h2nd_bounds = [0.01 30]/param.scales.time;
-stg_sep_t_bounds = [2 60]/param.scales.time;
+stg_sep_t_bounds = [5 60]/param.scales.time;
 orb_ins_t_bounds = [0 100]/param.scales.time;
 
 % design indirect optimization variable constrains
-param.tvc_limit = 15/180*pi;
+param.tvc_limit = 30/180*pi;
 
-N_1st = 10; N_2nd = 20;
+N_1st = 100; N_2nd = 100;
 param.N_1st = N_1st; param.N_2nd = N_2nd;
 N = N_1st+N_2nd; x0 = drop_record.x(:,end);
 % overwrite initial launch attitude
 rn0 = norm(x0(1:3)); vn0 = norm(x0(4:6)); v = x0(4:6);
 e_rx = x0(1:3)/rn0; e_bz = cross(e_rx,v)/norm(cross(e_rx,v));
-pua = -90*pi/180; % pitch up angle
+pua = -0*pi/180; % pitch up angle
 x0(4:6) = cos(pua)*v + sin(pua)*cross(e_bz,v) + (1-cos(pua))*dot(e_bz,v)*e_bz;
 
 % initial guess propagation
@@ -168,7 +169,7 @@ dt_throtl = 0.1/param.scales.time;
 for i = 1:N_1st
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*1+5*e_v;
+    guess_u = e_r*5+1*e_v;
     init_u = [guess_u/norm(guess_u); 0.8];
     dynfunc_1st = param.dynfunc_1st_burn;
     if init_x(ntot*N+1) >= dt_throtl
@@ -194,7 +195,7 @@ init_x(param.init_ind_ptr(param.nstate+1:ntot)+N_1st+1) = init_u;
 for i = N_1st+2:N_1st+N_2nd
     e_v = current_x(4:6)/norm(current_x(4:6));
     e_r = current_x(1:3)/norm(current_x(1:3));
-    guess_u = e_r*1+10*e_v;
+    guess_u = e_r*5+10*e_v;
     init_u = [guess_u/norm(guess_u); 1];
     if init_x(ntot*N+2) >= dt_throtl
         dt_2nd = dt_throtl;
@@ -319,7 +320,7 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     state_1st = state(:,1:N_1st+1); state_2nd = state(:,N_1st+2:end);
     control_1st = control(:,1:N_1st+1); control_2nd = control(:,N_1st+2:end);
     dxdt_1st = dynfunc_1st_burn(0,state_1st,control_1st);
-    dxdt_2nd = dynfunc_2nd_burn (0,state_2nd,control_2nd);
+    dxdt_2nd = dynfunc_2nd_burn(0,state_2nd,control_2nd);
 
     % % locate the payload fairing drop point
     % ind_height_abv = find(vecnorm(state(1:3,:))>=param.plf_dropalti_ref+param.earthR);
@@ -338,15 +339,15 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     [dxdt_col_2nd,force_col_2nd] = dynfunc_2nd_burn(0,xcol_2nd,ucol_2nd);
     ceq(1:param.nstate*(N-1)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
         reshape((xcoldot_2nd-dxdt_col_2nd)',[param.nstate*(N_2nd-1),1])];
-    % if jet_2nd
-    %     ind_jet2nd = ind_jet-(1+N_1st);
-    %     mstgsep = param.m02+param.mplf;
-    %     ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
-    %         reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
-    %         reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
-    %     ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
-    %     ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
-    % end
+
+    % drop the payload fairing exactly halfway of the 2nd stage burn
+    ind_jet2nd = floor(N_2nd/3);
+    ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
+        reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
+        reshape((xcoldot_2nd(:,ind_jet2nd+1:end)-dxdt_col_2nd(:,ind_jet2nd+1:end))',[param.nstate*(N_2nd-ind_jet2nd-1),1])];
+    ceq(param.nstate*(N-2)+1:param.nstate*(N-1)-1) = xcoldot_2nd(1:end-1,ind_jet2nd)-dxdt_col_2nd(1:end-1,ind_jet2nd);
+    ceq(param.nstate*(N-1)) = state_2nd(end,ind_jet2nd+1)+param.mplf-dxdt_col_2nd(end,ind_jet2nd)*h_2nd-state_2nd(end,ind_jet2nd);
+    mplfjets = param.m02;
 
     % stage separation constraints from x_N1st to x_N1st+1 reset vehicle mass
     coast_dt = min([10/param.scales.time coast_t]);
@@ -375,17 +376,33 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % propellant usage constraint
     ind_c = 1;
     c(:,ind_c) = param.m0-state(7,N_1st+1)-param.mp1; ind_c = ind_c+1;
-    c(:,ind_c) = param.mstgsep-state(7,N+1)-param.mp2; ind_c = ind_c+1;
+    c(:,ind_c) = mplfjets-state(7,N+1)-param.mp2; ind_c = ind_c+1;
 
     % above the ground constraint
     c(:,ind_c:ind_c+N-1) = param.earthR-vecnorm(state(1:3,2:N+1)); ind_c = ind_c+N;
+
+    % outside of the airspace clearance constraint
+    e_r = state_1st(1:3,1)./vecnorm(state_1st(1:3,1));
+    dr = state_1st(1:3,2:N_1st+1)-state(1:3,1);
+    dh = param.earthR+param.air_clearance(2)-vecnorm(state_1st(1:3,1));
+    dalti = dot(e_r.*ones(size(dr)),dr);
+    pseudo_downrange = vecnorm(dr-e_r*dalti);
+    N_air_clearance = floor(0.3*N_1st); % hardcoded check for 30% points
+    ind_air_clearance = pseudo_downrange <= param.air_clearance(1);
+    c(:,ind_c:ind_c+sum(ind_air_clearance)-1) = dalti(ind_air_clearance)-dh;
+    c(:,ind_c+sum(ind_air_clearance):ind_c+N_air_clearance-1) = -1;
+    ind_c = ind_c+N_air_clearance;
+    
+    % % pitch angle and TVC angle constraint
+    % tvc_angle = dot(control(1:3,:),state(4:6,:))./vecnorm(state(4:6,:));
+    % c(:,ind_c:ind_c+N) = cos(param.tvc_limit)-tvc_angle;
 
     % payload g-load constraint
     total_ext_forces = [force_col_1st(4:6,:)+force_col_1st(7:9,:) force_col_2nd(4:6,:)+force_col_2nd(7:9,:)];
     c(:,ind_c:ind_c+N-2) = vecnorm(total_ext_forces)./[xcol_1st(7,:) xcol_2nd(7,:)]-param.g0*param.max_gload;
 
     % visualization
-    if mod(func_count,500) == 0
+    if mod(func_count,1000) == 0
         param.axes = plotter(x,param); drawnow
     end
     func_count = func_count + 1;

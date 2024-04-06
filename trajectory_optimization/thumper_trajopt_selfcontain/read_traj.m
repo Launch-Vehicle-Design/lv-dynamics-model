@@ -3,7 +3,7 @@ set(0,'DefaultTextInterpreter','latex')
 set(0,'DefaultFigureColor',[1,1,1])
 set(groot,'defaultAxesFontSize',16)
 
-file_name = "thumper_straj_cgp3dof.mat";
+file_name = "thumper_straj_cg3dof.mat";
 if exist(file_name,"file")
     load(file_name,"log_x","log_param");
 end
@@ -60,11 +60,11 @@ rorb_rot = orb_rotmat*rorb(nu); vorb_rot = orb_rotmat*vorb(nu);
 lla_rot = ecef2lla(rorb_rot',0,earth_radius)';
 lla_traj = ecef2lla(states(1:3,:)',0,earth_radius)';
 
-figure; plot3(rorb_rot(1,:),rorb_rot(2,:),rorb_rot(3,:),"Color",[0.4 0.4 0.4],"LineWidth",2);
+figure; plot3(rorb_rot(1,:),rorb_rot(2,:),rorb_rot(3,:),"Color",[0.5 0.5 0.5],"LineWidth",1,"LineStyle","--");
 hold on; [X,Y,Z] = sphere(100); xl = xlim; yl = ylim; zl = zlim;
 plot3(states(1,:),states(2,:),states(3,:),"Color",[1 0 0],"LineWidth",1.5);
 surf(X*log_param.scales.length,Y*log_param.scales.length,Z*log_param.scales.length, ...
-    "EdgeColor","none","FaceColor",[0.7 0.7 0.7],"FaceAlpha",1);
+    "EdgeColor","none","FaceColor",[0.8 0.8 0.8],"FaceAlpha",1);
 axis equal; xlim(xl); ylim(yl); zlim(zl);
 xlabel("x"); ylabel("y"); zlabel("z");
 

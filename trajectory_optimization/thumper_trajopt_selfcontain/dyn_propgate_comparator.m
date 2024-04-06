@@ -3,7 +3,7 @@ set(0,'DefaultTextInterpreter','latex')
 set(0,'DefaultFigureColor',[1,1,1])
 set(groot,'defaultAxesFontSize',16)
 
-file_name = "thumper_straj_cgp3dof.mat";
+file_name = "thumper_straj_equator.mat";
 if exist(file_name,"file")
     load(file_name,"log_x","log_param");
 end
@@ -49,9 +49,9 @@ states_dyn(:,end1st_ind+1:end) = record.x.*cont_traj.scales.state;
 % state plotter
 earth_radius = log_param.earthR*log_param.scales.length;
 rn = vecnorm(states(1:3,:)); vn = vecnorm(states(4:6,:)); alti = rn-earth_radius;
-tvc = ctrls(1:3,:); throtl = ctrls(4,:); pa = acos(dot(states(4:6,:)./vn,tvc));
+tvc = ctrls(1:3,:); throtl = ctrls(4,:); pa = pi/2-acos(dot(states(4:6,:),states(1:3,:))./vn./rn);
 rn_dyn = vecnorm(states_dyn(1:3,:)); vn_dyn = vecnorm(states_dyn(4:6,:));
-alti_dyn = rn_dyn-earth_radius; pa_dyn = acos(dot(states_dyn(4:6,:)./vn_dyn,tvc));
+alti_dyn = rn_dyn-earth_radius; pa_dyn = pi/2-acos(dot(states_dyn(4:6,:),states_dyn(1:3,:))./vn_dyn./rn_dyn);
 
 figure;
 subplot(2,2,1);
@@ -69,4 +69,4 @@ xlabel("Time since Release (s)"); ylabel("Vehicle Mass (kg)");
 subplot(2,2,4);
 plot(t,pa*180/pi,"k","LineWidth",1.2); hold on
 plot(t,pa_dyn*180/pi,"b","LineWidth",1.2); grid on
-xlabel("Time since Release (s)"); ylabel("TVC Angle (deg)");
+xlabel("Time since Release (s)"); ylabel("Pitch Angle (deg)");

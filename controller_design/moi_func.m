@@ -9,7 +9,9 @@ function funcs = moi_func
 
 % parallel axis theorem
 moia = @(m,r) m*(r'*r*eye(3) - r*r');
+dmoia = @(m,r,dm,dr) dm*(r'*r*eye(3) - r*r') + m*(2*r'*dr*eye(3) - 2*r*dr');
 funcs.moia = moia;
+funcs.dmoia = dmoia;
 
 % % % fixed structure % % %
 % payload - cube
@@ -88,16 +90,25 @@ funcs.moic_aft = @(m_aft,d,l) funcs.moit_aft(m_aft,d,l) - moia(m_aft,-funcs.rc_a
 
 % % % propellant % % %
 % second stage liquid propellant - spherical pendulum model
-funcs.rc_2ndstg_p = @(d,l) [-l/2; 0; 0];
+funcs.rc_2ndstg_p = @(d,h) [-h/2; 0; 0];
+funcs.drc_2ndstg_p = @(d,h,dd,dh) [-dh/2; 0; 0];
 funcs.moic_2ndstg_p_rgb = @(mp,d,l) mp*diag([1/8*d^2 1/16*d^2+1/12*l^2 1/16*d^2+1/12*l^2]);
+funcs.dmoic_2ndstg_p_rbg = @(mp,d,l,dmp,dd,dl) dmp*diag([1/8*d^2 1/16*d^2+1/12*l^2 1/16*d^2+1/12*l^2]) + ...
+    mp*diag([1/4*d*dd 1/8*d*dd 1/8*d*dd]) + mp*diag([0 1/6*l*dl 1/6*l*dl]);
 funcs.moit_2ndstg_p_rgb = @(mp,d,l) funcs.moic_2ndstg_p_rgb(mp,d,l) + moia(mp,-funcs.rc_2ndstg_p(d,l));
 funcs.L1 = @(d,h) d./3.68.*coth(3.68.*h./d);
 funcs.m1 = @(mp,d,h) mp.*d./(4.4.*h).*tanh(3.68.*h./d);
 funcs.m0 = @(mp,d,h) mp - funcs.m1(mp,d,h);
 funcs.l1 = @(d,h) -d./7.36.*csch(7.36.*h./d);
 funcs.l0 = @(mp,d,h) (mp.*(h/2-d.^2/(8.*h))-(funcs.l1(d,h)+funcs.L1(d,h)).*funcs.m1(mp,d,h))./funcs.m0(mp,d,h);
+funcs.I0 = @(mp,d,h) funcs.moic_2ndstg_p_rgb(mp,d,h) + (mp*(h^2/4-d^2/8*(1.995-d/h*(1.07*cosh(3.68*h/d)-1.07)/sinh(3.68*h/d))) - ...
+    funcs.m0(mp,d,h)*funcs.l0(mp,d,h)^2 + funcs.m1(mp,d,h)*(funcs.l1(d,h)+funcs.L1(d,h)))*[0 0 0; 0 1 0; 0 0 1];
+funcs.dI0 = @(mp,d,h,dmp,dd,dh) funcs.dmoic_2ndstg_p_rbg(mp,d,h,dmp,dd,dh); % for now ignore the rest of the terms 
 % first stage liquid propellant - end burner solid cylinder
-funcs.rc_1ststg_p = @(d,l) [-l/2; 0; 0];
+funcs.rc_1ststg_p = @(d,h) [-h/2; 0; 0];
+funcs.drc_1ststg_p = @(d,h,dd,dh) [-dh/2; 0; 0];
 funcs.moic_1ststg_p_rgb = @(mp,d,l) mp*diag([1/8*d^2 1/16*d^2+1/12*l^2 1/16*d^2+1/12*l^2]);
+funcs.dmoic_1ststg_p_rbg = @(mp,d,l,dmp,dd,dl) dmp*diag([1/8*d^2 1/16*d^2+1/12*l^2 1/16*d^2+1/12*l^2]) + ...
+    mp*diag([1/4*d*dd 1/8*d*dd 1/8*d*dd]) + mp*diag([0 1/6*l*dl 1/6*l*dl]);
 funcs.moit_1ststg_p_rgb = @(mp,d,l) funcs.moic_2ndstg_p_rgb(mp,d,l) + moia(mp,-funcs.rc_2ndstg_p(d,l));
 end

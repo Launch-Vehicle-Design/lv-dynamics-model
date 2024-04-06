@@ -69,7 +69,7 @@ elseif t < mission_tline(2)
         state(state_ind) = xspline(residue_t,C_1st,log_h1st)';
     end
     uk = log_control(:,ind_t); ukp1 = log_control(:,ind_t+1);
-    ctrl = xlinear(residue_t,uk,ukp1,log_h1st)';
+    ctrl = xlinear(residue_t,uk,ukp1,log_h1st);
     force = xlinear(residue_t,forces_1st(:,2),forces_1st(:,1),log_h1st);
     stage = 1;
 
@@ -96,7 +96,7 @@ elseif t < mission_tline(4)
         state(state_ind) = xspline(residue_t,C_2nd,log_h2nd)';
     end
     uk = log_control(:,log_N1st+ind_t); ukp1 = log_control(:,log_N1st+2+ind_t);
-    ctrl = xlinear(residue_t,uk,ukp1,log_h2nd)';
+    ctrl = xlinear(residue_t,uk,ukp1,log_h2nd);
     force = xlinear(residue_t,forces_2nd(:,2),forces_2nd(:,1),log_h1st);
     stage = 2;
 else
@@ -109,7 +109,7 @@ state = state.*state_scaling;
 force = force.*force_scaling;
 
 cont_traj.state = state;
-cont_traj.ctrl = ctrl;
+cont_traj.ctrl = [ctrl(1:3)/norm(ctrl(1:3)); ctrl(4)];
 cont_traj.force = force;
 cont_traj.stage = stage;
 cont_traj.scales.state = state_scaling;

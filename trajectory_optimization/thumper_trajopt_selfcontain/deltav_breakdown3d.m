@@ -1,4 +1,4 @@
-file_name = "thumper_straj_cgp3dof.mat";
+file_name = "thumper_straj_cg3dof.mat";
 load(file_name,"log_x","log_param");
 
 state_scaling = ones([7 1]); time_scaling = 1;
@@ -51,6 +51,7 @@ v_gloss_coast = trapz(g_coast.*dot(e_rcst,e_vcst)*coast_time);
 v_gloss = v_gloss_1st + v_gloss_coast + v_gloss_2nd;
 
 %% drag loss
+skewOMEGA = log_param.skewOMEGA./log_param.scales.time;
 atmo_profile_1st = atmo(alt_1st); atmo_profile_2nd = atmo(alt_2nd);
 rho_1st = atmo_profile_1st.rho; rho_2nd = atmo_profile_2nd.rho;
 p_1st = atmo_profile_1st.P; p_2nd = atmo_profile_2nd.P;
@@ -59,8 +60,10 @@ p_1st = atmo_profile_1st.P; p_2nd = atmo_profile_2nd.P;
 % mach_2nd = vecnorm(state_2nd(:,4:6)')./sqrt(1.4.*p_2nd./rho_2nd);
 % for i = 1:length(mach_2nd) cd_2nd(i) = CD(mach_2nd(i),0); end
 cd_1st = 0.5; cd_2nd = 0.5;
-drag_1st = cd_1st.*0.5.*rho_1st.*vecnorm(state_1st(:,4:6)').^2*S;
-drag_2nd = cd_2nd.*0.5.*rho_2nd.*vecnorm(state_2nd(:,4:6)').^2*S;
+vrel_1st = state_1st(:,4:6)'-skewOMEGA*state_1st(:,1:3)';
+vrel_2nd = state_2nd(:,4:6)'-skewOMEGA*state_2nd(:,1:3)';
+drag_1st = cd_1st.*0.5.*rho_1st.*vecnorm(vrel_1st).^2*S;
+drag_2nd = cd_2nd.*0.5.*rho_2nd.*vecnorm(vrel_2nd).^2*S;
 v_dloss_1st = trapz(drag_1st./state_1st(:,7)'*h_1st);
 v_dloss_2nd = trapz(drag_2nd./state_2nd(:,7)'*h_2nd);
 v_dloss_coast = trapz([drag_1st(end); drag_2nd(1)]/state_2nd(1,7)*h_2nd);

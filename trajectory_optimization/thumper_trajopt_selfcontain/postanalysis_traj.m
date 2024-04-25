@@ -9,7 +9,7 @@ if exist(file_name,"file")
 end
 
 % set mission time since the drop
-t = 0:0.1:520;
+t = 0:0.02:520;
 states = nan([log_param.nstate,length(t)]);
 ctrls = nan([log_param.nctrl,length(t)]);
 forces = nan([9,length(t)]);
@@ -65,13 +65,16 @@ scatter(t(ind_max_q),alti(ind_max_q)/1000,"filled","LineWidth",2,"MarkerFaceColo
 scatter(t(ind_max_qalf),alti(ind_max_qalf)/1000,"filled","LineWidth",2,"MarkerFaceColor","r");
 xlabel("Time since Release (s)"); ylabel("Vehicle Attitude (km)");
 legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+
 subplot(2,2,2); plot(t,vn,"k","LineWidth",1.2); hold on; grid on
 scatter(t(ind_max_q),vn(ind_max_q),"filled","LineWidth",2,"MarkerFaceColor","m");
 scatter(t(ind_max_qalf),vn(ind_max_qalf),"filled","LineWidth",2,"MarkerFaceColor","r");
 xlabel("Time since Release (s)"); ylabel("Vehicle Velocity (m/s)");
 legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+
 subplot(2,2,3); plot(t,states(7,:),"k","LineWidth",1.2); grid on
 xlabel("Time since Release (s)"); ylabel("Vehicle Mass (kg)");
+
 subplot(2,2,4); plot(t,pa*180/pi,"k","LineWidth",1.2); hold on; grid on
 scatter(t(ind_max_q),pa(ind_max_q)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","m");
 scatter(t(ind_max_qalf),pa(ind_max_qalf)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","r");
@@ -79,23 +82,29 @@ xlabel("Time since Release (s)"); ylabel("Pitch Angle (deg)");
 legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
 
 figure;
-subplot(2,2,1); plot(t,alti/0.3048,"k","LineWidth",1.2); hold on; grid on
-scatter(t(ind_max_q),alti(ind_max_q)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","m");
-scatter(t(ind_max_qalf),alti(ind_max_qalf)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","r");
+subplot(2,2,1); plot(t,alti/0.3048,"k","LineWidth",2); hold on; grid on
+scatter(t(ind_max_q),alti(ind_max_q)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","b");
+scatter(t(ind_max_qalf),alti(ind_max_qalf)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","g");
 xlabel("Time since Release (s)"); ylabel("Vehicle Attitude (ft)");
-legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
-subplot(2,2,2); plot(t,vn/0.3048,"k","LineWidth",1.2); hold on; grid on
-scatter(t(ind_max_q),vn(ind_max_q)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","m");
-scatter(t(ind_max_qalf),vn(ind_max_qalf)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","r");
+lgd1 = legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+% fontsize(lgd1,20,'points'); set(lgd1,'Box','on','Color',[0.2,0.2,0.2]);
+
+subplot(2,2,2); plot(t,vn/0.3048,"k","LineWidth",2); hold on; grid on
+scatter(t(ind_max_q),vn(ind_max_q)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","b");
+scatter(t(ind_max_qalf),vn(ind_max_qalf)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","g");
 xlabel("Time since Release (s)"); ylabel("Vehicle Velocity (ft/s)");
-legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
-subplot(2,2,3); plot(t,states(7,:)*2.20462262,"k","LineWidth",1.2); grid on
+lgd2 = legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+% fontsize(lgd2,20,'points'); set(lgd2,'Box','on','Color',[0.2,0.2,0.2]);
+
+subplot(2,2,3); plot(t,states(7,:)*2.20462262,"k","LineWidth",2); grid on
 xlabel("Time since Release (s)"); ylabel("Vehicle Mass (lb)");
-subplot(2,2,4); plot(t,pa*180/pi,"k","LineWidth",1.2); hold on; grid on
-scatter(t(ind_max_q),pa(ind_max_q)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","m");
-scatter(t(ind_max_qalf),pa(ind_max_qalf)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","r");
+
+subplot(2,2,4); plot(t,pa*180/pi,"k","LineWidth",2); hold on; grid on
+scatter(t(ind_max_q),pa(ind_max_q)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","b");
+scatter(t(ind_max_qalf),pa(ind_max_qalf)*180/pi,"filled","LineWidth",2,"MarkerFaceColor","g");
 xlabel("Time since Release (s)"); ylabel("Pitch Angle (deg)");
-legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+lgd4 = legend("Trajectory","Max Q", "Max Q$\alpha$","interpreter","latex");
+% fontsize(lgd4,20,'points'); set(lgd4,'Box','on','Color',[0.2,0.2,0.2]); plot_darkmode
 
 %% control plotter
 figure;
@@ -128,10 +137,11 @@ figure;
 scatter(gacce_lateral(stages==1),gacce_axial(stages==1),"b","filled"); hold on
 scatter(gacce_lateral(stages==2),gacce_axial(stages==2),"r","filled"); grid on
 plot(fllf_falcon9(1,:),fllf_falcon9(2,:),"Color",[0.5 0.5 0.5],"LineWidth",1.5,"LineStyle","--");
-plot(fllf(1,:),fllf(2,:),"k","LineWidth",2);
+plot(fllf(1,:),fllf(2,:),"Color",[1 1 1],"LineWidth",2);
 xlim([-2.5 2.5]); ylim([-2.5 6.5]);
 xlabel("Lateral Acceleration (g)"); ylabel("Axial Acceleration (g)");
-legend("1st Stage Burn","2nd Stage Burn","Falcon 9","Thumper","interpreter","latex");
+lgd = legend("1st Stage Burn","2nd Stage Burn","Falcon 9","Thumper","interpreter","latex");
+fontsize(lgd,20,'points'); plot_darkmode; set(lgd,'Box','on','Color',[0.2,0.2,0.2]);
 
 %% dynamic pressure plot
 figure; subplot(2,1,1); plot(t,q,"k","LineWidth",1.2); hold on; grid on

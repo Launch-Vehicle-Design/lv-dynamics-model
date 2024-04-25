@@ -37,7 +37,10 @@ mfuel = curr_x(16,:);
 % decode controls
 tvc_angle = curr_u(1:2,:);
 gf_aoa = curr_u(3:6,:);
-y = tvc_angle(1); p = tvc_angle(2);
+y = tvc_angle(1);
+p = tvc_angle(2);
+cy = cos(y); sy = sin(y);
+cp = cos(p); sp = sin(p);
 
 % parameters
 rn = vecnorm(r);
@@ -51,8 +54,10 @@ q = q./vecnorm(q);
 C = EP2C(q);
 
 % TVC
+cstar = param.g0*param.Isp1;
 tvc_body = param.tvc_point(y,p);
 tvc_iner = C*tvc_body;
+Ftb = Tmax*tvc_body;
 Ft = Tmax*tvc_iner;
 
 % atmosphere
@@ -67,17 +72,181 @@ OMEGA = param.skewOMEGA;
 atmo_v = OMEGA*r;
 vrel = v - atmo_v;
 vreln = vecnorm(vrel);
+mach = vreln./a;
 e_d = -vrel./vreln;
 Fd = 1/2.*b.*vreln.^2.*e_d;
+
+% grid fin control force
+gfqs = 1/2.*param.gamma.*pres.*mach.^2.*param.gfS;
+Fgfbn = gfqs.*param.dclda(mach).*gf_aoa;
+Fgfb = param.gf_point*Fgfbn;
+Fgf = C*Fgfb;
 
 % moment arms
 rcp = param.rcp_1st;
 renge = [-param.d.enge1st; 0; 0];
 rc = param.rc1st(m,mox,mfuel);
 moic = param.moic1st(m,mox,mfuel);
+dmoic = param.dmoic1st(m,mox,mfuel,-Tmax/cstar,0,0);
 moicinv = inv(moic);
 rcg2cp = rcp - rc;
 rcg2eg = renge - rc;
+
+% % % Compute Jacobian for intermediate variables % % %
+dotCmat = [q0 q3 -q2; q1 q2 q3; -q2 q1 -q0; -q3 q0 q1;
+    -q3 q0 q1; q2 -q1 q0; q1 q2 q3; -q0 -q3 q2;
+    q2 -q1 q0; q3 -q0 -q1; q0 q3 -q2; q1 q2 q3]';
+dotCmat = [q0 q3 -q2; -q3 q0 q1; q2 -q1 q0;
+    q1 q2 q3; q2 -q1 q0; q3 -q0 -q1;
+    -q2 q1 -q0; q1 q2 q3; q0 q3 -q2;
+    -q3 q0 q1; -q0 -q3 q2; q1 q2 q3];
+
+dotCinvmat = [q0 -q3 q2; q3 q0 -q1; -q2 q1 q0;
+    q1 q2 q3; q2 -q1 -q0; q3 q0 -q1; 
+    -q2 q1 q0; q1 q2 q3; -q0 q3 -q2;
+    -q3 -q0 q1; q0 -q3 q2; q1 q2 q3];
+
+skew = @(v) [0 -v(3) v(2); v(3) 0 -v(1); -v(2) v(1) 0];
+RCG2CP = skew(rcg2cp);
+RCG2ENG = skew(rcg2eg);
+
+% % Forces % %
+% inertial frame - gravity force
+Jfgr = m*(3*mu/((r'*r)^2.5)*(r*r') - mu/((r'*r)^1.5)*eye(3));
+Jfgv = zeros(3);
+Jfgq = zeros(3,4);
+Jfgw = zeros(3);
+Jfgm = -mu/((r'*r)^1.5)*r;
+
+Jfgy = zeros(3,1);
+Jfgp = zeros(3,1);
+Jfggfa = zeros(3,4);
+
+% inertial frame - drag force
+Jfdr = b/2*(vreln*OMEGA - e_d*(OMEGA*vrel)');
+Jfdv = b/2*(-e_d*vrel'-vreln*eye(3));
+Jfdq = zeros(3,4);
+Jfdw = zeros(3);
+Jfdm = zeros(3,1);
+
+Jfdy = zeros(3,1);
+Jfdp = zeros(3,1);
+Jfdgfa = zeros(3,4);
+
+% body frame - drag force
+Jfdbr = C'*Jfdr;
+Jfdbv = C'*Jfdv;
+Jfdbq = reshape(dotCinvmat*Fd,[3,4]);
+Jfdbw = zeros(3);
+Jfdbm = zeros(3,1);
+
+Jfdby = zeros(3,1);
+Jfdbp = zeros(3,1);
+Jfdbgfa = zeros(3,4);
+
+% body frame - thrust
+Jftbr = zeros(3);
+Jftbv = zeros(3);
+Jftbq = zeros(3,4);
+Jftbw = zeros(3);
+Jftbm = zeros(3,1);
+
+Jftby = Tmax*[-cp*sy; cp*cy; 0];
+Jftbp = Tmax*[-cy*sp; -sp*sy; -cp];
+Jftbgfa = zeros(3,4);
+
+% inertial frame - thrust
+Jftr = zeros(3);
+Jftv = zeros(3);
+Jftq = reshape(dotCmat*Ftb,[3,4]);
+Jftw = zeros(3);
+Jftm = zeros(3,1);
+
+Jfty = C*Jftby;
+Jftp = C*Jftbp;
+Jftgfa = zeros(3,4);
+
+% body frame - grid fin control force
+Jfgfbr = zeros(3);
+Jfgfbv = zeros(3);
+Jfgfbq = zeros(3,4);
+Jfgfbw = zeros(3);
+Jfgfbm = zeros(3,1);
+
+Jfgfby = zeros(3,1);
+Jfgfbp = zeros(3,1);
+Jfgfbgfa = param.gf_point*gfqs;
+
+% inertial frame - grid fin control force
+Jfgfr = zeros(3);
+Jfgfv = zeros(3);
+Jfgfq = reshape(dotCmat*Fgfb,[3,4]);
+Jfgfw = zeros(3);
+Jfgfm = zeros(3,1);
+
+Jfgfy = zeros(3,1);
+Jfgfp = zeros(3,1);
+Jfgfgfa = C*Jfgfbgfa;
+
+% % Moments % %
+% body frame - drag moment
+Jmdbr = RCG2CP*Jfdbr;
+Jmdbv = RCG2CP*Jfdbv;
+Jmdbq = RCG2CP*Jfdbp;
+Jmdbw = zeros(3);
+Jmdbm = zeros(3,1);
+
+Jmdby = zeros(3,1);
+Jmdbp = zeros(3,1);
+Jmdbgfa = zeros(3,4);
+
+% body frame - thrust moment
+Jmtbr = zeros(3);
+Jmtdbv = zeros(3);
+Jmtbq = zeros(3,4);
+Jmtbw = zeros(3);
+Jmtbm = zeros(3,1);
+
+Jmtby = RCG2ENG*Jftby;
+Jmtbp = RCG2ENG*Jftbp;
+Jmtbgfa = zeros(3,4);
+
+% body frame - grid fin control moment
+Jmgfbr = zeros(3);
+Jmgfdbv = zeros(3);
+Jmgfbq = zeros(3,4);
+Jmgfbw = zeros(3);
+Jmgfbm = zeros(3,1);
+
+Jmgfby = zeros(3,1);
+Jmgfbp = zeros(3,1);
+Jmgfbgfa = RCG2ENG*Jfgfbgfa;
+
+% % Angular Momentum Components % %
+% I x omega
+Jiwr = zeros(3);
+Jiwv = zeros(3);
+Jiwq = zeros(3,4);
+Jiww = moic;
+Jiwm = dmoic*omega;
+
+Jiwy = zeros(3,1);
+Jiwp = zeros(3,1);
+Jiwgfa = zeros(3,4);
+
+% I x omega dot
+W = skew(omega);
+IW = skew(moic*omega);
+
+Jiwdr = Jmdbr;
+Jiwdv = Jmdbv;
+Jiwdq = Jmdbq;
+Jiwdw = IW-W*Jiww;
+Jiwdm = -W*Jiwm;
+
+Jiwdy = Jmtby;
+Jiwdp = Jmtbp;
+Jiwdgfa = Jmgfbgfa;
 
 % % % Compute state matrix A % % %
 % Jacobian - rdot terms
@@ -88,17 +257,14 @@ Arw = zeros(3);
 Arm = zeros(3,1);
 
 % Jacobian - vdot terms
-Avr_grav = 3*mu/((r'*r)^2.5)*r*r' - mu/((r'*r)^1.5)*eye(3);
+Avr_grav = 3*mu/((r'*r)^2.5)*(r*r') - mu/((r'*r)^1.5)*eye(3);
 Avr_aero = b/(2*m)*(vreln*OMEGA - e_d*vrel'*OMEGA);
-dotCmat = [q0 q3 -q2; q1 q2 q3; -q2 q1 -q0; -q3 q0 q1;
-    -q3 q0 q1; q2 -q1 q0; q1 q2 q3; -q0 -q3 q2;
-    q2 -q1 q0; q3 -q0 -q1; q0 q3 -q2; q1 q2 q3]';
 
 Avr = Avr_grav + Avr_aero;
-Avv = -b/(2*m)*(vreln*eye(3) - e_d*vrel');
-Avq = 2/m*Tmax*reshape(tvc_body'*dotCmat,[4,3])';
+Avv = b/(2*m)*(-e_d*vrel'-vreln*eye(3));
+Avq = 2/m*Tmax*reshape((Ftb+Fgfb)'*dotCmat,[4,3])';
 Avw = zeros(3);
-Avm = -1/m^2*(Ft+Fd);
+Avm = -1/m^2*(Ft+Fd+Fgf);
 
 % Jacobian - qdot terms
 Aqr = zeros(4,3);

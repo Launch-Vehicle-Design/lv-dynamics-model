@@ -38,6 +38,9 @@ for i = 1:length(index_nonprop_1st)
     cgs1 = (weighted_cg + dims(2)*dims(6))/ms1;
 end
 mp1 = prop1st(2); m1 = mp1 + ms1;
+% propellant and structure mass correction for residuals 1%
+percent = 0.01;
+mp1 = mp1/(1+percent); ms1 = ms1 + mp1*percent - 0.2*stg1st.interstage.dims(2);
 cg1 = (cgs1*ms1 + mp1*prop1st(6))/m1;
 
 % 2nd stage sizing
@@ -53,6 +56,9 @@ for i = 1:length(index_nonprop_2nd)
     cgs2 = (weighted_cg + dims(2)*dims(6))/ms2;
 end
 mp2 = ox2nd(2)+fuel2nd(2); m2 = mp2 + ms2;
+% propellant and structure mass correction for residuals 0.7% for controls
+percent = 0.007;
+mp2 = mp2/(1+percent); ms2 = ms2 + mp2*percent + 0.2*stg1st.interstage.dims(2);
 cg2 = (cgs2*ms2 + ox2nd(2)*ox2nd(6) + fuel2nd(2)*fuel2nd(6))/m2;
 
 mpl = pl2nd(2); m0 = m1 + m2 + mpl;

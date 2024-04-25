@@ -27,17 +27,20 @@ function axes = plotter(x,param)
     plot(unsc_t,vecnorm([unsc_x unsc_y unsc_z]')-param.earthR*param.scales.length,"k","LineWidth",1.2); grid on;
     % plot(unsc_t, unsc_x,"r","LineWidth",1.2); grid on; hold on;
     % plot(unsc_t, unsc_y,"b","LineWidth",1.2); plot(unsc_t, unsc_z,"k","LineWidth",1.2);
-    xlabel("Time since Release (s)"); ylabel("Vehicle Altitude (m)"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Vehicle Altitude (m)");
+    xlim([0,600]); ylim([-5e4,3e5]); hold off;
 
     axes(2) = subplot(2,3,2);
     plot(unsc_t,vecnorm([unsc_vx unsc_vy unsc_vz]'),"k","LineWidth",1.2); grid on;
     % plot(unsc_t, unsc_vx,"r","LineWidth",1.2); grid on; hold on;
     % plot(unsc_t, unsc_vy,"b","LineWidth",1.2); plot(unsc_t, unsc_vz,"k","LineWidth",1.2);
-    xlabel("Time since Release (s)"); ylabel("Vehicle Speed (m/s)"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Vehicle Speed (m/s)"); xlim([0,600]);
+    xlim([0,600]); ylim([0,8500]); hold off;
 
-    axes(3) = subplot(2,3,3); 
+    axes(3) = subplot(2,3,3);
     plot(unsc_t, x(param.init_ind_ptr(7)+(1:N))*param.scales.mass,"k","LineWidth",1.2); grid on
     xlabel("Time since Release (s)"); ylabel("Vehicle Mass (kg)");
+    xlim([0,600]); ylim([0,1850]);
 
     axes(4) = subplot(2,3,4); 
     plot(unsc_t, unsc_ux,"r","LineWidth",1.2); hold on;
@@ -45,13 +48,16 @@ function axes = plotter(x,param)
     if length(param.init_ind_ptr) == 12
         plot(unsc_t, unsc_uz,"k","LineWidth",1.2);
     end
-    xlabel("Time since Release (s)"); ylabel("Thrust Vector Direction"); hold off;
+    xlabel("Time since Release (s)"); ylabel("Thrust Vector Direction");
+    xlim([0,600]); ylim([-1,1]); hold off;
 
     axes(5) = subplot(2,3,5);
     plot(unsc_t,(pi/2-acos(pitch_ang))*180/pi,"k","LineWidth",1.2); grid on
     xlabel("Time since Release (s)"); ylabel("pitch, undirectional (deg)");
+    xlim([0,600]); ylim([-30,50]);
 
-    axes(6) = subplot(2,3,6); 
+    axes(6) = subplot(2,3,6);
     plot(unsc_t, throtl*100,"k","LineWidth",1.2); grid on
     xlabel("Time since Release (s)"); ylabel("Throttle (\%)");
+    xlim([0,600]); ylim([0,100]);
 end

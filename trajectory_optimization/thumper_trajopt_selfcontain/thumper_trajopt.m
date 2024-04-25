@@ -4,19 +4,23 @@ set(0,'DefaultTextInterpreter','latex')
 set(0,'DefaultFigureColor',[1,1,1])
 set(groot,'defaultAxesFontSize',16)
 
+global param
+
 %% Simplified Trajectory Optimization
 % % Assumptions
 % zero lift generated
 % point mass launch vehicle
 
-user_gues = false;
+user_gues = true;
 load_prev = true;
 
 do_orb_ins_c = false;
 top_down_filename = "thumper.mat";
 bottom_up_filename = "vehicle_sizing.mat";
 prev_file_name = "thumper_straj_cgp3dof.mat";
+
 top_down_mass = false;
+param.record_video = false;
 
 % top down mass
 mass_mat = [248.214252429984; 27.2989240780479; 174.915328351937;
@@ -77,7 +81,7 @@ else
     param = extract_bottomup(vehicle_sizing,param);
 end
 param.Isp1 = 278/param.scales.time;
-param.Isp2 = 369.5/param.scales.time;
+param.Isp2 = 377/param.scales.time;
 % payload fairing
 param.mplf = 4/param.scales.mass;
 param.mstgsep = param.m02 + param.mplf;
@@ -103,8 +107,8 @@ param.fpa_final_ref = 0;
 param.orb_inc_final_ref = 100/180*pi;
 param.plf_dropalti_ref = 140e3/param.scales.length;
 % constraint reference
-param.max_gload = 6;
-param.air_clearance = [3.2e3 40000*0.3048 1]/param.scales.length;
+param.max_gload = 5.5;
+param.air_clearance = [3*1.6e3 40000*0.3048 1]/param.scales.length;
 
 % xopt represents state and control trajectory of the system
 % with total length of 11*N+3(4)
@@ -120,23 +124,22 @@ ntot = param.nstate+param.nctrl;
 % cost function weighting
 weights.mp_weight = 100;
 weights.fpaf_weight = 10;
-weights.vf_weight = 1;
-weights.altf_weight = 1;
-weights.dutvc_weight = 100;
-weights.duT_weight = 10;
+weights.tvca_weight = 0.1;
+weights.vf_weight = 100;
+weights.altf_weight = 100;
 weights.time_weight = 100;
 
 % design optimization variable bounds
-throtl_bounds = [0.6 1 0.6 1];
+throtl_bounds = [0.8 1 0.6 1];
 h1st_bounds = [0.01 30]/param.scales.time;
 h2nd_bounds = [0.01 30]/param.scales.time;
 stg_sep_t_bounds = [5 60]/param.scales.time;
 orb_ins_t_bounds = [0 100]/param.scales.time;
 
 % design indirect optimization variable constrains
-param.tvc_limit = 30/180*pi;
+param.tvc_limit = 45/180*pi;
 
-N_1st = 100; N_2nd = 100;
+N_1st = 50; N_2nd = 75;
 param.N_1st = N_1st; param.N_2nd = N_2nd;
 N = N_1st+N_2nd; x0 = drop_record.x(:,end);
 % overwrite initial launch attitude
@@ -224,7 +227,9 @@ if load_prev && exist(prev_file_name,"file")
 end
 
 plotter3d(init_x,param);
-figure; param.axes = plotter(init_x,param);
+param.fig_ind = 1;
+param.fig = figure(Position=[0,0,1920,1200]);
+param.axes = plotter(init_x,param);
 
 % cost function
 cost_func = @(xopt) q_cost(xopt,N_1st,N_2nd,weights,param);
@@ -234,7 +239,7 @@ disp("Initial Guess Cost Function: " + num2str(cost_func(init_x)));
 low_bound = [-(param.earthR+2*param.alt_final_ref)*ones([3*N,1]);
     -sqrt(param.mu/param.earthR)*ones([3*N,1]);
     (param.m0-param.mp1)*ones([N_1st,1]);
-    (param.mstgsep-param.mp2)*ones([N_2nd,1]);
+    (param.m02-param.mp2)*ones([N_2nd,1]);
     -1*ones([3*N,1]);
     throtl_bounds(1)*ones([N_1st,1]);
     throtl_bounds(3)*ones([N_2nd,1]);
@@ -265,7 +270,7 @@ init_x(ind_lb_violate) = 0.999*low_bound(ind_lb_violate);
 init_x(ind_ub_violate) = 0.999*upp_bound(ind_ub_violate);
 
 % constraint function
-nonl_con_func = @(x) nonl_con_sep(x,N_1st,N_2nd,x0,param);
+nonl_con_func = @(x) nonl_con_sep(x,N_1st,N_2nd,x0);
 nonl_con_func(init_x);
 
 % optimization solver setup
@@ -278,8 +283,16 @@ options = optimoptions('fmincon','Display','iter','Algorithm','interior-point',.
 %     "SubproblemAlgorithm","cg",'MaxFunctionEvaluations',1e8,'MaxIterations',100,...
 %     'ConstraintTolerance',1e-4);
 x = fmincon(cost_func,init_x,[],[],[],[],low_bound,upp_bound,nonl_con_func,options);
-[csol,ceqsol] = nonl_con_sep(x,N_1st,N_2nd,x0,param);
+[csol,ceqsol] = nonl_con_func(x);
 plotter(x,param);
+
+if param.record_video
+    vidname = "trajopt_result.mp4";
+    v = VideoWriter(vidname,"MPEG-4"); open(v);
+    for k = 1:length(param.frame)
+        writeVideo(v,param.frame(k)); end
+    close(v);
+end
 
 %% FUNCTION - Cost function
 function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
@@ -290,15 +303,13 @@ function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2 + ... minimize fuel used
         weights.altf_weight*(norm(state(1:3,N))-param.earthR-param.alt_final_ref)^2 + ...
         weights.vf_weight*(norm(state(4:6,N))-param.v_final_ref)^2 + ...
-        weights.time_weight*(N_1st*xopt(ntot*N+1)+N_2nd*xopt(ntot*N+2)+xopt(ntot*N+3));
-        % weights.duT_weight*sum((control(end,:)-movmean(control(end,:),50)).^2); % + ...
-        % weights.altf_weight*sum([(vecnorm(state(1:3,1:N_1st))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+1);(vecnorm(state(1:3,N_1st+1:N))'-param.earthR-param.alt_final_ref)*xopt(ntot*N+2)].^2) + ...
-        % weights.vf_weight*sum([(vecnorm(state(4:6,1:N_1st))'-param.v_final_ref)*xopt(ntot*N+1);(vecnorm(state(4:6,N_1st+1:N))'-param.v_final_ref)*xopt(ntot*N+2)].^2);
-    % weights.dutvc_weight*sum(diff([xopt(1*N+1:4*N+N_1st)*xopt(ntot*N+1);xopt(4*N+1+N_1st:5*N)*xopt(ntot*N+2)]).^2) + ...
+        weights.time_weight*(N_1st*xopt(ntot*N+1)+N_2nd*xopt(ntot*N+2)+xopt(ntot*N+3)) + ...
+        weights.tvca_weight*sum(dot(control(1:3,:),state(4:6,:)));
 end
 
 %% FUNCTION - Constraint function
-function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
+function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0)
+    global param
     persistent func_count;
     if isempty(func_count) func_count = 0; end
 
@@ -340,7 +351,7 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     ceq(1:param.nstate*(N-1)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
         reshape((xcoldot_2nd-dxdt_col_2nd)',[param.nstate*(N_2nd-1),1])];
 
-    % drop the payload fairing exactly halfway of the 2nd stage burn
+    % drop the payload fairing exactly 1/3 of the 2nd stage burn
     ind_jet2nd = floor(N_2nd/3);
     ceq(1:param.nstate*(N-2)) = [reshape((xcoldot_1st-dxdt_col_1st)',[param.nstate*N_1st,1]);
         reshape((xcoldot_2nd(:,1:ind_jet2nd-1)-dxdt_col_2nd(:,1:ind_jet2nd-1))',[param.nstate*(ind_jet2nd-1),1]);
@@ -396,13 +407,18 @@ function [c,ceq] = nonl_con_sep(x,N_1st,N_2nd,x0,param)
     % % pitch angle and TVC angle constraint
     % tvc_angle = dot(control(1:3,:),state(4:6,:))./vecnorm(state(4:6,:));
     % c(:,ind_c:ind_c+N) = cos(param.tvc_limit)-tvc_angle;
+    % ind_c = ind_c+N;
 
     % payload g-load constraint
     total_ext_forces = [force_col_1st(4:6,:)+force_col_1st(7:9,:) force_col_2nd(4:6,:)+force_col_2nd(7:9,:)];
     c(:,ind_c:ind_c+N-2) = vecnorm(total_ext_forces)./[xcol_1st(7,:) xcol_2nd(7,:)]-param.g0*param.max_gload;
 
     % visualization
-    if mod(func_count,1000) == 0
+    if mod(func_count,N*ntot) == 0
+        if param.record_video
+            param.frame(param.fig_ind) = getframe(param.fig);
+            param.fig_ind = param.fig_ind + 1;
+        end
         param.axes = plotter(x,param); drawnow
     end
     func_count = func_count + 1;

@@ -68,7 +68,8 @@ surf(X*log_param.scales.length,Y*log_param.scales.length,Z*log_param.scales.leng
 axis equal; xlim(xl); ylim(yl); zlim(zl);
 xlabel("x"); ylabel("y"); zlabel("z");
 
+shifted_long = 0;
 uif = uifigure; g = geoglobe(uif);
-geoplot3(g,lla_rot(1,:),lla_rot(2,:),lla_rot(3,:),"LineWidth",2,"Color",[0 104 58]/255); hold(g,'on')
-geoplot3(g,lla_traj(1,:),lla_traj(2,:),lla_traj(3,:),"LineWidth",2,"Color",[1 1 0]);
+geoplot3(g,lla_rot(1,:),lla_rot(2,:)+shifted_long,lla_rot(3,:),"LineWidth",2,"Color",[0 104 58]/255); hold(g,'on')
+geoplot3(g,lla_traj(1,:),lla_traj(2,:)+shifted_long,lla_traj(3,:),"LineWidth",2,"Color",[1 1 0]);
 

@@ -1,5 +1,8 @@
-function [u_tvc,u_gf] = mpctvc1st(curr_x,curr_u,traj,param,phase)
-mpc.n_hrzn = 10;
+function [u_tvc,u_gf] = mpctvc1st(curr_x,curr_u,traj,param,phase,hrzn_len)
+mpc.n_hrzn = 20;
+if exist("mpc_hrzn_len","var")
+    mpc.n_hrzn = hrzn_len;
+end
 mpc.n_state = 14; mpc.n_ctrl = 6;
 mpc.ntot = mpc.n_state + mpc.n_ctrl;
 mpc.state_ind = 1:14;
@@ -8,8 +11,7 @@ mpc.dt = param.mpc_dt;
 mpc.t = traj.t;
 mpc.phase = phase;
 
-[~,mpc.start_ind] = min(vecnorm(traj.states(1:3,:)-curr_x(1:3)));
-mpc.ref_states = traj.states(:,mpc.start_ind:mpc.start_ind+mpc.n_hrzn-1);
+mpc.ref_states = traj.states(:,traj.ref_ind);
 mpc.init_x = curr_x;
 mpc.init_u = curr_u;
 mpc.init_C = EP2C(curr_x(7:10));
@@ -17,7 +19,7 @@ mpc.init_C = EP2C(curr_x(7:10));
 % construct initial optimization variable and bounds
 mpc.ref_traj = [mpc.ref_states(1:6,:); repmat(curr_x(7:13),[1,mpc.n_hrzn]); mpc.ref_states(7,:)];
 delta_x = repmat(curr_x(mpc.state_ind),[1,mpc.n_hrzn]) - mpc.ref_traj;
-init_x =  reshape([delta_x' rand([mpc.n_hrzn,mpc.n_ctrl])],[mpc.ntot*mpc.n_hrzn,1]);
+init_x =  [reshape(delta_x,[mpc.n_hrzn*mpc.n_state,1]); rand([mpc.n_hrzn*mpc.n_ctrl,1])];
 
 % tvc actuation bounds
 tvc_bounds = zeros([2*mpc.n_hrzn,2]);
@@ -27,9 +29,10 @@ tvc_bounds(:,2) = param.tvc_limit(2);
 gf_bounds = zeros([4*mpc.n_hrzn,2]);
 gf_bounds(:,1) = param.gf_limit(1);
 gf_bounds(:,2) = param.gf_limit(2);
-% lower bounds for the optimization valuables
-low_bound = [-Inf*ones(6*mpc.n_hrzn,1); -1*ones(4*mpc.n_hrzn,1); -Inf*ones(3*mpc.n_hrzn,1); tvc_bounds(:,1); gf_bounds(:,1)];
-upp_bound = [Inf*ones(6*mpc.n_hrzn,1); ones(4*mpc.n_hrzn,1); Inf*ones(3*mpc.n_hrzn,1); tvc_bounds(:,2); gf_bounds(:,2)];
+% bounds for the optimization valuables
+state_bound = [-Inf*ones(6,1) Inf*ones(6,1); -1*ones(4,1) ones(4,1); -Inf*ones(3,1) Inf*ones(3,1)];
+low_bound = [repmat(state_bound(:,1),[mpc.n_hrzn,1]); tvc_bounds(:,1); gf_bounds(:,1)];
+upp_bound = [repmat(state_bound(:,2),[mpc.n_hrzn,1]); tvc_bounds(:,2); gf_bounds(:,2)];
 
 % linear state propagation equality constraint
 % [mpc.A,mpc.B] = lv1st3dof(curr_x,curr_u,param);

@@ -55,11 +55,14 @@ init_x = [init_r; init_v; init_q; init_omega;
     init_fuelang; init_doxang; init_dfuelang];
 
 % simulation
+mpc_hrzn_len = 20;
 curr_x = init_x;
 u_acs = zeros([8,1]); u_gf = zeros([4,1]);
 for i = 1:size(t,2)
     curr_t = t(i);
     curr_C = EP2C(curr_x(7:10));
+    traj.ref_ind = i:i+mpc_hrzn_len-1;
+    traj.ref_ind(traj.ref_ind>size(t,2)) = size(t,2);
     if traj.stages(i) == 0
         u = [zeros([3,1]); u_acs; u_gf];
     elseif traj.stages(i) == 1
@@ -71,7 +74,7 @@ for i = 1:size(t,2)
         u_tvc = [y; max(min(p,param.tvc_limit(2)),param.tvc_limit(1))];
 
         % 1st stage main engine TVC controller
-        [u_tvc,u_gf] = mpctvc1st(curr_x,u_tvc,traj,param,traj.stages(i));
+        [u_tvc,u_gf] = mpctvc1st(curr_x,u_tvc,traj,param,traj.stages(i),mpc_hrzn_len);
         u = [u_tvc; traj.ctrls(4,i); u_acs; u_gf];
     end
 

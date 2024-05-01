@@ -38,3 +38,7 @@ The dynamic model is established and evaluated in an Earth-Centered Inertia fram
 Various constraints are applied to the formulation - collocation constraint for dynamic feasibility; stage separation coast state constraint to link the two-stage propulsion phases together; final orbit constraint; thrust pointing constraint; propellant mass constraint; above the surface constraint; airfield clearance constraint; payload g-loading constraint; and physical time step constraint. The completed optimization problem formulation is shown below
 
 <img src="output_visualization/optimization_problem.png" alt="Optimization">
+
+## Contributer
+
+#### Chenming Fan (justinf19@vt.edu) - Department of Aerospace and Ocean Engineering at Virginia Tech

@@ -3,7 +3,7 @@ clear; clc; close all
 addpath("rotation_toolbox\");
 trajectory_file = "thumper_straj_cg3dof.mat";
 interp_traj_file = "interpolated_traj.mat";
-featured_dt = 0.1; featured_tf = 510;
+featured_dt = 0.01; featured_tf = 510;
 t = 0:featured_dt:featured_tf;
 
 load(trajectory_file,"log_x","log_param");
@@ -61,20 +61,21 @@ u_acs = zeros([8,1]); u_gf = zeros([4,1]);
 for i = 1:size(t,2)
     curr_t = t(i);
     curr_C = EP2C(curr_x(7:10));
-    traj.ref_ind = i:i+mpc_hrzn_len-1;
-    traj.ref_ind(traj.ref_ind>size(t,2)) = size(t,2);
     if traj.stages(i) == 0
         u = [zeros([3,1]); u_acs; u_gf];
     elseif traj.stages(i) == 1
+        [~,start_ind] = min(vecnorm(curr_x(1:3)-traj.states(1:3,:)));
+        traj.ref_ind = start_ind:start_ind+mpc_hrzn_len-1;
+        traj.ref_ind(traj.ref_ind>size(t,2)) = size(t,2);
         % extract from trajectory profile - naive control
         tvc_iner = traj.ctrls(1:3,i);
         tvc_body = curr_C'*tvc_iner;
         p = -asin(tvc_body(3));
         y = atan(tvc_body(2)/tvc_body(1));
-        u_tvc = [y; max(min(p,param.tvc_limit(2)),param.tvc_limit(1))];
+        curr_u = [y; max(min(p,param.tvc_limit(2)),param.tvc_limit(1)); u_gf];
 
         % 1st stage main engine TVC controller
-        [u_tvc,u_gf] = mpctvc1st(curr_x,u_tvc,traj,param,traj.stages(i),mpc_hrzn_len);
+        [u_tvc,u_gf] = mpctvc1st(curr_x,curr_u,traj,param,traj.stages(i),mpc_hrzn_len);
         u = [u_tvc; traj.ctrls(4,i); u_acs; u_gf];
     end
 

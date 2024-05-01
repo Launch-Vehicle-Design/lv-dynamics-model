@@ -139,7 +139,7 @@ orb_ins_t_bounds = [0 100]/param.scales.time;
 % design indirect optimization variable constrains
 param.tvc_limit = 45/180*pi;
 
-N_1st = 50; N_2nd = 75;
+N_1st = 200; N_2nd = 400;
 param.N_1st = N_1st; param.N_2nd = N_2nd;
 N = N_1st+N_2nd; x0 = drop_record.x(:,end);
 % overwrite initial launch attitude
@@ -303,8 +303,8 @@ function [f,g] = q_cost(xopt,N_1st,N_2nd,weights,param)
     f = -weights.mp_weight*xopt(param.nstate*N)/param.mp2 + ... minimize fuel used
         weights.altf_weight*(norm(state(1:3,N))-param.earthR-param.alt_final_ref)^2 + ...
         weights.vf_weight*(norm(state(4:6,N))-param.v_final_ref)^2 + ...
-        weights.time_weight*(N_1st*xopt(ntot*N+1)+N_2nd*xopt(ntot*N+2)+xopt(ntot*N+3)) + ...
-        weights.tvca_weight*sum(dot(control(1:3,:),state(4:6,:)));
+        weights.time_weight*(N_1st*xopt(ntot*N+1)+N_2nd*xopt(ntot*N+2)+xopt(ntot*N+3)); % + ...
+        % weights.tvca_weight*sum(dot(control(1:3,:),state(4:6,:)));
 end
 
 %% FUNCTION - Constraint function

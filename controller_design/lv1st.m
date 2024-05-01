@@ -64,6 +64,8 @@ Ft = Tmax*tvc_iner;
 h = rn-param.earthR;
 atmo_profile = atmo(h);
 rho = atmo_profile.rho;
+pres = atmo_profile.P;
+a = sqrt(param.gamma.*pres./rho);
 Cd = 0.5*ones(size(rho));
 b = Cd.*rho.*param.S;
 
@@ -93,9 +95,9 @@ rcg2cp = rcp - rc;
 rcg2eg = renge - rc;
 
 % % % Compute Jacobian for intermediate variables % % %
-dotCmat = [q0 q3 -q2; q1 q2 q3; -q2 q1 -q0; -q3 q0 q1;
-    -q3 q0 q1; q2 -q1 q0; q1 q2 q3; -q0 -q3 q2;
-    q2 -q1 q0; q3 -q0 -q1; q0 q3 -q2; q1 q2 q3]';
+% dotCmat = [q0 q3 -q2; q1 q2 q3; -q2 q1 -q0; -q3 q0 q1;
+%     -q3 q0 q1; q2 -q1 q0; q1 q2 q3; -q0 -q3 q2;
+%     q2 -q1 q0; q3 -q0 -q1; q0 q3 -q2; q1 q2 q3]';
 dotCmat = [q0 q3 -q2; -q3 q0 q1; q2 -q1 q0;
     q1 q2 q3; q2 -q1 q0; q3 -q0 -q1;
     -q2 q1 -q0; q1 q2 q3; q0 q3 -q2;
@@ -192,7 +194,7 @@ Jfgfgfa = C*Jfgfbgfa;
 % body frame - drag moment
 Jmdbr = RCG2CP*Jfdbr;
 Jmdbv = RCG2CP*Jfdbv;
-Jmdbq = RCG2CP*Jfdbp;
+Jmdbq = RCG2CP*Jfdbq;
 Jmdbw = zeros(3);
 Jmdbm = zeros(3,1);
 
@@ -257,12 +259,9 @@ Arw = zeros(3);
 Arm = zeros(3,1);
 
 % Jacobian - vdot terms
-Avr_grav = 3*mu/((r'*r)^2.5)*(r*r') - mu/((r'*r)^1.5)*eye(3);
-Avr_aero = b/(2*m)*(vreln*OMEGA - e_d*vrel'*OMEGA);
-
-Avr = Avr_grav + Avr_aero;
-Avv = b/(2*m)*(-e_d*vrel'-vreln*eye(3));
-Avq = 2/m*Tmax*reshape((Ftb+Fgfb)'*dotCmat,[4,3])';
+Avr = (Jfgr + Jfdr)/m;
+Avv = Jfdv/m;
+Avq = (Jftq + Jfgfq)/m;
 Avw = zeros(3);
 Avm = -1/m^2*(Ft+Fd+Fgf);
 
@@ -274,29 +273,20 @@ Aqw = [-q1 -q2 -q3; q0 -q3 q2; q3 q0 -q1; -q2 q1 q0];
 Aqm = zeros(4,1);
 
 % Jacobian - wdot terms
-dotMmatr = [cross(rcg2cp,Avr_aero(:,1)) cross(rcg2cp,Avr_aero(:,2)) cross(rcg2cp,Avr_aero(:,3))]*m;
-dotMmatv = [cross(rcg2cp,Avv(:,1)) cross(rcg2cp,Avv(:,2)) cross(rcg2cp,Avv(:,3))]*m;
-dotMmatq = [cross(rcg2eg,Avq(:,1)) cross(rcg2eg,Avq(:,2)) cross(rcg2eg,Avq(:,3)) cross(rcg2eg,Avq(:,4))]*m;
-dotWmatw = [-moic(3,1)*wy+moic(2,1)*wz moic(3,2)*wx-moic(1,2)*wz -moic(2,3)*wx+moic(1,3)*wy;
-    -2*moic(2,1)*wx+(moic(1,1)-moic(2,2))*wy-moic(2,3)*wz (moic(1,1)-moic(2,2))*wx+2*moic(1,2)*wy+moic(1,3)*wz (moic(3,3)-moic(1,1))*wx-moic(1,2)*wy-2*moic(1,3)*wz;
-    2*moic(3,1)*wx+moic(3,2)*wy+(moic(3,3)-moic(1,1))*wz -moic(3,1)*wx-2*moic(3,2)*wy+(moic(2,2)-moic(3,3))*wz moic(2,1)*wx+(moic(2,2)-moic(3,3))*wy+2*moic(2,3)*wz];
-
-Awr = moicinv*dotMmatr;
-Awv = moicinv*dotMmatv;
-Awq = moicinv*dotMmatq;
-Aww = moicinv*dotWmatw;
-Awm = zeros(3,1);
+Awr = moicinv*Jiwdr;
+Awv = moicinv*Jiwdv;
+Awq = moicinv*Jiwdq;
+Aww = moicinv*Jiwdw;
+Awm = moicinv*Jiwdm;
 
 % Jacobian - mdot terms
-Ftn = vecnorm(Ft);
-cstar = param.g0*param.Isp1;
-
 Amr = zeros(1,3);
 Amv = zeros(1,3);
-Amq = Ft'*Avq*m/(cstar*Ftn);
+Amq = zeros(1,4);
 Amw = zeros(1,3);
 Amm = 0;
 
+% % A matrix % %
 A = [Arr Arv Arq Arw Arm;
     Avr Avv Avq Avw Avm;
     Aqr Aqv Aqq Aqw Aqm;
@@ -307,27 +297,32 @@ A = [Arr Arv Arq Arw Arm;
 % Jacobian - rdot terms
 Bry = zeros(3,1);
 Brp = zeros(3,1);
+Brgfa = zeros(3,4);
 
 % Jacobian - vdot terms
-Bvy = C*Tmax*[-cos(p)*sin(y); cos(p)*cos(y); 0]/m;
-Bvp = C*Tmax*[-sin(p)*cos(y); -sin(p)*sin(y); cos(p)]/m;
+Bvy = Jfty/m;
+Bvp = Jftp/m;
+Bvgfa = Jfgfgfa/m;
 
 % Jacobian - qdot terms
 Bqy = zeros(4,1);
 Bqp = zeros(4,1);
+Bqgfa = zeros(4,4);
 
 % Jacobian - wdot terms
-Bwy = moicinv*cross(rcg2eg,Bvy)*m;
-Bwp = moicinv*cross(rcg2eg,Bvp)*m;
+Bwy = moicinv*Jiwdy;
+Bwp = moicinv*Jiwdp;
+Bwgfa = moicinv*Jiwdgfa;
 
 % Jacobian - mdot terms
-Bmy = Ft'*Bvy*m/(cstar*Ftn);
-Bmp = Ft'*Bvp*m/(cstar*Ftn);
+Bmy = 0;
+Bmp = 0;
+Bmgfa = zeros(1,4);
 
-B = [Bry Brp;
-    Bvy Bvp;
-    Bqy Bqp;
-    Bwy Bwp;
-    Bmy Bmp];
+B = [Bry Brp Brgfa;
+    Bvy Bvp Bvgfa;
+    Bqy Bqp Bqgfa;
+    Bwy Bwp Bwgfa;
+    Bmy Bmp Bmgfa];
 
 end

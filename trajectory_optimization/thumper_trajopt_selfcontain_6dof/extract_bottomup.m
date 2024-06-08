@@ -157,8 +157,8 @@ enge2nd_diam = 14.9*0.0254/scales_length;
 solid_density = 1783.8/scales_density;
 ox_density = 1448/scales_density;
 fuel_density = 1000/scales_density;
-oxtank_length = 0.4376/scales_length;
-fueltank_length = 0.5/scales_length;
+oxtank_length = stg2nd.(ox2nd).dims(lcg_dim)*2/scales_length;
+fueltank_length = stg2nd.(fuel2nd).dims(lcg_dim)*2/scales_length;
 pl_size = 1*0.3048/scales_length;
 
 % % % component visualizer % % %
@@ -305,7 +305,8 @@ param.fuel_density = fuel_density;
 
 %% DEFINE PROPELLANT MOI FUNCTIONS
 % % % first stage consuming propellant - end burner geometry % % %
-param.rnc_prop1st = @(m) [-d.prop1st; 0; 0]+funcs.rc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2));
+% param.rnc_prop1st = @(m) [-d.prop1st; 0; 0]+funcs.rc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2)); % end burner
+param.rnc_prop1st = @(m) [-d.prop1st-l.prop1st/2; 0; 0]; % core burner
 param.drnc_prop1st = @(m,dm) funcs.drc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2),0,dm/param.solid_density/(pi*(param.univsl_diam/2)^2));
 param.moinc_prop1st = @(m) param.funcs.moic_1ststg_p_rgb(m,param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2)) + ...
     param.funcs.moia(m,param.rnc_prop1st(m));
@@ -313,8 +314,8 @@ param.dmoinc_prop1st = @(m,dm) param.funcs.dmoic_1ststg_p_rbg(m,param.univsl_dia
     param.funcs.dmoia(m,param.rnc_prop1st(m),dm,param.drnc_prop1st(m,dm));
 
 % % % second stage consuming propellant - pendulum model % % %
-param.rnc_ox2nd = @(m) [-d.ox2nd; 0; 0]+funcs.rc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2));
-param.rnc_fuel2nd = @(m) [-d.fuel2nd; 0; 0]+funcs.rc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2));
+param.rnc_ox2nd = @(m) [-d.ox2nd-fueltank_length-oxtank_length; 0; 0]-funcs.rc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2));
+param.rnc_fuel2nd = @(m) [-d.fuel2nd-fueltank_length; 0; 0]-funcs.rc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2));
 param.drnc_ox2nd = @(m,dm) funcs.drc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2),0,dm/param.ox_density/(pi*(param.univsl_diam/2)^2));
 param.drnc_fuel2nd = @(m,dm) funcs.drc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2),0,dm/param.fuel_density/(pi*(param.univsl_diam/2)^2));
 param.moinc_ox2nd = @(m) param.funcs.I0(m,param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2)) + param.funcs.moia(m,param.rnc_ox2nd(m));
@@ -329,30 +330,25 @@ param.dmoinc_fuel2nd = @(m,dm) param.funcs.dI0(m,param.univsl_diam,m/param.fuel_
 param.rc1st = @(m,mox,mfuel) (param.cg_1ststg*param.m_1ststg + ...
     param.rnc_prop1st(param.mp1-(param.m0-m-(param.m.ox2nd-mox)-(param.m.fuel2nd-mfuel)))*(param.mp1-(param.m0-m-(param.m.ox2nd-mox)-(param.m.fuel2nd-mfuel))) + ...
     param.rnc_ox2nd(mox)*mox + param.rnc_fuel2nd(mfuel)*mfuel)/m;
-param.moic1st = @(m,mox,mfuel) param.moinc_1ststg + ...
+param.moic1st = @(m,mox,mfuel,rc1st) param.moinc_1ststg + ...
     param.moinc_prop1st(param.mp1-(param.m0-m-(param.m.ox2nd-mox)-(param.m.fuel2nd-mfuel))) + ...
-    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - ...
-    param.funcs.moia(m,param.rc1st(m,mox,mfuel));
-param.dmoic1st = @(m,mox,mfuel,dm,dmox,dmfuel) param.dmoinc_prop1st(param.mp1-(param.m0-m-(param.m.ox2nd-mox)-(param.m.fuel2nd-mfuel)),dm-dmox-dmfuel) + ...
-    param.dmoinc_ox2nd(mox,dmox) + param.dmoinc_fuel2nd(mfuel,dmfuel) - ...
-    param.funcs.dmoia(m,param.rc1st(m,mox,mfuel),dm,0); % ignore the center of gravity shift
+    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - param.funcs.moia(m,rc1st);
+param.dmoic1st = @(m,mox,mfuel,dm,dmox,dmfuel,rc1st) param.dmoinc_prop1st(param.mp1-(param.m0-m-(param.m.ox2nd-mox)-(param.m.fuel2nd-mfuel)),dm-dmox-dmfuel) + ...
+    param.dmoinc_ox2nd(mox,dmox) + param.dmoinc_fuel2nd(mfuel,dmfuel) - param.funcs.dmoia(m,rc1st,dm,0); % ignore the center of gravity shift
 
 % % % total vehicle MOI second stage with PLF % % %
 param.rc2nd_wplf = @(m,mox,mfuel) (param.cg_2ndstg_wplf*param.m_2ndstg_wplf + ...
     param.rnc_ox2nd(mox)*mox + param.rnc_fuel2nd(mfuel)*mfuel)/m;
-param.moic2nd_wplf = @(m,mox,mfuel) param.moinc_2ndstg_wplf + ...
-    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - ...
-    param.funcs.moia(m,param.rc2nd_wplf(m,mox,mfuel));
-param.dmoic2nd_wplf = @(m,mox,mfuel,dm,dmox,dmfuel) param.dmoinc_ox2nd(mox,dmox) + ...
-    param.dmoinc_fuel2nd(mfuel,dmfuel) - ...
-    param.funcs.dmoia(m,param.rc2nd_wplf(m,mox,mfuel),dm,0); % ignore the center of gravity shift
+param.moic2nd_wplf = @(m,mox,mfuel,rc2nd) param.moinc_2ndstg_wplf + ...
+    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - param.funcs.moia(m,rc2nd);
+param.dmoic2nd_wplf = @(m,mox,mfuel,dm,dmox,dmfuel,rc2nd) param.dmoinc_ox2nd(mox,dmox) + ...
+    param.dmoinc_fuel2nd(mfuel,dmfuel) - param.funcs.dmoia(m,rc2nd,dm,0); % ignore the center of gravity shift
 
 % % % total vehicle MOI second stage w/o PLF % % %
 param.rc2nd = @(m,mox,mfuel) (param.cg_2ndstg*param.m_2ndstg + ...
     param.rnc_ox2nd(mox)*mox + param.rnc_fuel2nd(mfuel)*mfuel)/m;
-param.moic2nd = @(m,mox,mfuel) param.moinc_2ndstg + ...
-    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - ...
-    param.funcs.moia(m,param.rc2nd(m,mox,mfuel));
+param.moic2nd = @(m,mox,mfuel,rc2nd) param.moinc_2ndstg + ...
+    param.moinc_ox2nd(mox) + param.moinc_fuel2nd(mfuel) - param.funcs.moia(m,rc2nd);
 param.dmoic2nd = param.dmoic2nd_wplf; % ignore the center of gravity shift
 end
 

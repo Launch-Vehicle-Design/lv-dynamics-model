@@ -288,7 +288,8 @@ param.fuel_density = fuel_density;
 
 %% DEFINE PROPELLANT MOI FUNCTIONS
 % % % first stage consuming propellant - end burner geometry % % %
-param.rnc_prop1st = @(m) [-d.prop1st; 0; 0]+funcs.rc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2));
+% param.rnc_prop1st = @(m) [-d.prop1st; 0; 0]+funcs.rc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2)); % end burner
+param.rnc_prop1st = @(m) [-d.prop1st-l.prop1st/2; 0; 0]; % core burner
 param.drnc_prop1st = @(m,dm) funcs.drc_1ststg_p(param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2),0,dm/param.solid_density/(pi*(param.univsl_diam/2)^2));
 param.moinc_prop1st = @(m) param.funcs.moic_1ststg_p_rgb(m,param.univsl_diam,m/param.solid_density/(pi*(param.univsl_diam/2)^2)) + ...
     param.funcs.moia(m,param.rnc_prop1st(m));
@@ -296,8 +297,8 @@ param.dmoinc_prop1st = @(m,dm) param.funcs.dmoic_1ststg_p_rbg(m,param.univsl_dia
     param.funcs.dmoia(m,param.rnc_prop1st(m),dm,param.drnc_prop1st(m,dm));
 
 % % % second stage consuming propellant - pendulum model % % %
-param.rnc_ox2nd = @(m) [-d.ox2nd; 0; 0]+funcs.rc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2));
-param.rnc_fuel2nd = @(m) [-d.fuel2nd; 0; 0]+funcs.rc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2));
+param.rnc_ox2nd = @(m) [-d.ox2nd-fueltank_length-oxtank_length; 0; 0]-funcs.rc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2));
+param.rnc_fuel2nd = @(m) [-d.fuel2nd-fueltank_length; 0; 0]-funcs.rc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2));
 param.drnc_ox2nd = @(m,dm) funcs.drc_2ndstg_p(param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2),0,dm/param.ox_density/(pi*(param.univsl_diam/2)^2));
 param.drnc_fuel2nd = @(m,dm) funcs.drc_2ndstg_p(param.univsl_diam,m/param.fuel_density/(pi*(param.univsl_diam/2)^2),0,dm/param.fuel_density/(pi*(param.univsl_diam/2)^2));
 param.moinc_ox2nd = @(m) param.funcs.I0(m,param.univsl_diam,m/param.ox_density/(pi*(param.univsl_diam/2)^2)) + param.funcs.moia(m,param.rnc_ox2nd(m));

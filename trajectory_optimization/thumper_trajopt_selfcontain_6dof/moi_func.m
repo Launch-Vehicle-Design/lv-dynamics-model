@@ -102,7 +102,7 @@ funcs.m0 = @(mp,d,h) mp - funcs.m1(mp,d,h);
 funcs.l1 = @(d,h) -d./7.36.*csch(7.36.*h./d);
 funcs.l0 = @(mp,d,h) (mp.*(h/2-d.^2/(8.*h))-(funcs.l1(d,h)+funcs.L1(d,h)).*funcs.m1(mp,d,h))./funcs.m0(mp,d,h);
 funcs.I0 = @(mp,d,h) funcs.moic_2ndstg_p_rgb(mp,d,h) + (mp*(h^2/4-d^2/8*(1.995-d/h*(1.07*cosh(3.68*h/d)-1.07)/sinh(3.68*h/d))) - ...
-    funcs.m0(mp,d,h)*funcs.l0(mp,d,h)^2 + funcs.m1(mp,d,h)*(funcs.l1(d,h)+funcs.L1(d,h)))*[0 0 0; 0 1 0; 0 0 1];
+    funcs.m0(mp,d,h)*funcs.l0(mp,d,h)^2 + funcs.m1(mp,d,h)*(funcs.l1(d,h)+funcs.L1(d,h))^2)*[0 0 0; 0 1 0; 0 0 1];
 funcs.dI0 = @(mp,d,h,dmp,dd,dh) funcs.dmoic_2ndstg_p_rbg(mp,d,h,dmp,dd,dh); % for now ignore the rest of the terms 
 % first stage liquid propellant - end burner solid cylinder
 funcs.rc_1ststg_p = @(d,h) [-h/2; 0; 0];

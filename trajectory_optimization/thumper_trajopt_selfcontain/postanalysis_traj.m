@@ -42,6 +42,7 @@ for i = 1:size(e_nx,2)
     force_acce_b(:,i) = b_mat_b2i\force_acce(:,i);
     acce_b(:,i) = b_mat_b2i\(forces(1:3,i)+force_acce(:,i));
 end
+stg1_ind = find(stages==1); stg1p5_ind = find(stages==1.5); stg2_ind = find(stages==2);
 
 acce = forces(1:3,:) + force_acce;
 gacce_vec_b = acce_b/(log_param.g0*log_param.scales.acceleration);
@@ -63,7 +64,7 @@ q_imp = q/6895; qalf_imp = qalf/6895;
 [max_q,ind_max_q] = max(q);
 [max_qalf,ind_max_qalf] = max(qalf);
 ind_stg_sep = find(stages==1.5,1);
-[~,ind2nd_plf_jet] = min(diff(mass(stg2_ind)));
+[~,ind2nd_plf_jet] = min(diff(states(7,stg2_ind)));
 ind_plf_jet = ind2nd_plf_jet + stg2_ind(1);
 
 % predict percise elliptical orbit
@@ -82,7 +83,6 @@ vlv = dot(states(1:3,:),states(4:6,:))./rn;
 vlh = sqrt(vecnorm(states(4:6,:)).^2-vlv.^2);
 
 % mass flow rate
-stg1_ind = find(stages==1); stg1p5_ind = find(stages==1.5); stg2_ind = find(stages==2);
 mrate = zeros(size(states(7,:)));
 mrate(stg1_ind) = min(0,[diff(states(7,stg1_ind)) 0])./dt;
 mrate(stg2_ind) = min(0,[diff(states(7,stg2_ind)) 0])./dt;
@@ -203,7 +203,7 @@ plot(t,rcg(1,:)/0.3048,"k","LineWidth",2); hold on; grid on
 scatter(t(ind_stg_sep),rcg(1,ind_stg_sep)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","r");
 scatter(t(ind_plf_jet),rcg(1,ind_plf_jet)/0.3048,"filled","LineWidth",2,"MarkerFaceColor","m");
 xlabel("Time since Release (s)"); ylabel("Center of Mass Location (ft)"); ylim([-param.vehicle_sizing.lengths(3)/0.3048 0]);
-legend("$r_{cg}$","Stage Separation","Payload Fairing Separation","interpreter","latex","Location","northwest");
+legend("$r_{cg}$","Stage Separation","Payload Fairing Separation","interpreter","latex","Location","southwest");
 subplot_ind = subplot_ind+1;
 
 subplot(subplot_size(1),subplot_size(2),subplot_ind);

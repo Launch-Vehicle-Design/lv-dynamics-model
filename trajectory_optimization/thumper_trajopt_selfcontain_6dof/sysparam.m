@@ -25,7 +25,7 @@ mass_mat = [optimal(1:3); optimal(6:8)];
 
 % environmental parameter
 param.mu = 3.986004418e14/param.scales.gravparam;
-param.earthR = 6357e3/param.scales.length;
+param.earthR = 6378e3/param.scales.length;
 param.OMEGA = [0;0;2*pi/(24*3600)];
 param.skewOMEGA = [0 -param.OMEGA(3) 0; param.OMEGA(3) 0 0; 0 0 0];
 param.gamma = 1.4;
@@ -68,17 +68,17 @@ param.acs_xy_point = pi/4;
 param.acs_point = [cos(param.acs_xy_point)*ones(size(param.acs_yz_point));
     sin(param.acs_xy_point)*cos(param.acs_yz_point);
     sin(param.acs_xy_point)*sin(param.acs_yz_point)];
-param.r_acs_mount = [-param.d.enge2nd*ones([1,8]); cos(pi/8:pi/4:2*pi); sin(pi/8:pi/4:2*pi)];
+param.r_acs_mount = [-param.d.enge2nd*ones([1,8]); param.univsl_diam/2*[cos(pi/8:pi/4:2*pi); sin(pi/8:pi/4:2*pi)]];
 
 % CP estimation by Barrowman's equation
 param = cp_est(param);
 
 % Grid fin parameters
 param.dclda = @(M) min(4./sqrt(M.^2-1),2*pi);
-param.gfS = param.brm.S*param.brm.C_R;
+param.gfS = param.brm.S*param.brm.C_R/param.scales.area;
 param.gfn = param.brm.N;
 param.gf_point = [zeros(1,4); cos([3*pi/4 pi/4 3*pi/4 pi/4]); sin([3*pi/4 pi/4 3*pi/4 pi/4])];
-param.r_gf_mount = [-param.d.enge1st*ones([1,4]); cos(pi/4:pi/2:2*pi); sin(pi/4:pi/2:2*pi)];
+param.r_gf_mount = [-param.d.enge1st*ones([1,4]); param.univsl_diam/2*[cos(pi/4:pi/2:2*pi); sin(pi/4:pi/2:2*pi)]];
 param.gf_limit = [-45 45]*pi/180;
 
 % initial release condition
